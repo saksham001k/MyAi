@@ -17,6 +17,12 @@ body.sidebar-collapsed .sidebar-toggle{right:24px;transform:rotate(180deg)}
 .file-chip img{width:22px;height:22px;border-radius:5px;object-fit:cover}
 .file-chip-name{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary)}
 .file-chip-remove{width:22px;height:22px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--text-secondary)}
+.upload-dragging{outline:3px solid rgba(56,189,248,.7);outline-offset:-5px}
+.diff-file{margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:var(--radius-md);background:#0f172a}
+.diff-file summary{cursor:pointer;color:var(--text-primary);font-weight:600}
+.diff-content{max-height:360px;overflow:auto;margin:10px 0;padding:12px;background:#020617;color:var(--text-secondary);font:12px/1.6 ui-monospace,SFMono-Regular,monospace;white-space:pre}
+.diff-content span{display:block;min-width:max-content}.diff-add{color:#86efac;background:rgba(34,197,94,.12)}.diff-remove{color:#fca5a5;background:rgba(239,68,68,.12)}.diff-context{color:var(--text-secondary)}
+.diff-actions{display:flex;gap:8px}
 .global-drop-overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;background:rgba(2,6,23,.72);backdrop-filter:blur(6px);pointer-events:none}
 .global-drop-card{display:grid;gap:4px;padding:28px 38px;border:1px dashed var(--accent);border-radius:var(--radius-lg);background:var(--surface-overlay);color:var(--text-primary);text-align:center;box-shadow:0 0 0 8px var(--accent-soft),var(--shadow)}
 .global-drop-card span{color:var(--text-secondary);font-size:13px}

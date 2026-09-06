@@ -17,6 +17,9 @@ class Workbench:
         self.records = self.root / 'changes'
         self.files.mkdir(parents=True, exist_ok=True)
         self.records.mkdir(exist_ok=True)
+        self.backups = (root / '.kiss' / 'backups').resolve()
+        self.backups.mkdir(parents=True, exist_ok=True)
+        self.last_applied = None
 
     def path(self, name):
         if not isinstance(name, str) or len(name) > 200 or '\\' in name:
@@ -148,12 +151,48 @@ class Workbench:
                     temp.unlink(missing_ok=True)
         try:
             for f in record['files']:
+                backup = self.backups / f"{record['id']}-{uuid.uuid4().hex}.json"
+                current_content = self.read(f['path']) if self.path(f['path']).exists() else None
+                backup.write_text(json.dumps({'path': f['path'], 'content': current_content}), encoding='utf-8')
                 write(f, target)
                 written.append(f)
             record['status'] = 'undone' if undo else 'applied'
             self.save(record)
+            if not undo:
+                self.last_applied = record['id']
         except OSError:
             for f in reversed(written):
                 write(f, source)
             raise
+        return record
+
+    def undo_last(self):
+        if not self.last_applied:
+            raise ValueError('No applied agent edit is available to undo.')
+        return self.apply(self.last_applied, undo=True)
+
+    def apply_file(self, ident, path_name, undo=False):
+        record = self.get(ident)
+        target_file = next((item for item in record['files'] if item['path'] == path_name), None)
+        if target_file is None:
+            raise ValueError('File is not part of this change.')
+        source, target = ('after', 'before') if undo else ('before', 'after')
+        path = self.path(path_name)
+        current = self.read(path_name) if path.exists() else None
+        if current != target_file[source]:
+            raise ValueError('File changed since review; create a fresh proposal.')
+        backup = self.backups / f"{record['id']}-{uuid.uuid4().hex}.json"
+        backup.write_text(json.dumps({'path': path_name, 'content': current}), encoding='utf-8')
+        if target_file[target] is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(target_file[target], encoding='utf-8', newline='')
+        record.setdefault('file_status', {})[path_name] = 'undone' if undo else 'applied'
+        record['status'] = 'applied' if all(
+            record['file_status'].get(item['path']) == 'applied' for item in record['files']
+        ) else 'pending'
+        self.save(record)
+        if not undo:
+            self.last_applied = ident
         return record

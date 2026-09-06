@@ -1,6 +1,8 @@
 """Bounded autonomous Thought/Action/Observation/Final Answer execution."""
 import json
 import re
+import subprocess
+import threading
 from typing import Any, Dict, Optional
 
 from .prompts import AGENT_SYSTEM_PROMPT
@@ -21,6 +23,7 @@ class AutonomousAgent:
         self.max_iterations = max(1, min(max_iterations, 50))
         self.confirmation_callback = None
         self.auto_approve = auto_approve is True
+        self.test_timeout = 120
 
     @staticmethod
     def parse_response(response: str) -> Dict[str, Any]:
@@ -104,6 +107,10 @@ class AutonomousAgent:
                 caller = self.tool_call or self.engine.call_tool
                 result = caller(parsed["tool"], **parsed["args"])
                 observation = {"ok": True, "result": result}
+                if parsed["tool"] in {"apply_edit", "write_file", "edit_file"} or (
+                    isinstance(result, dict) and result.get("modified_files")
+                ):
+                    observation["tests"] = self._run_post_edit_tests()
             except Exception as exc:
                 observation = {"ok": False, "error": str(exc)}
             observations.append(observation)
@@ -121,3 +128,28 @@ class AutonomousAgent:
     def _emit(callback: Optional[Any], event: Dict[str, Any]):
         if callback:
             callback(event)
+
+    def _run_post_edit_tests(self) -> dict:
+        """Run the repository tests after an edit without blocking tool execution."""
+        result = {}
+
+        def worker():
+            try:
+                completed = subprocess.run(
+                    ["pytest", "tests/"], capture_output=True, text=True,
+                    timeout=self.test_timeout, check=False
+                )
+                result.update({
+                    "ok": completed.returncode == 0,
+                    "returncode": completed.returncode,
+                    "output": (completed.stdout + completed.stderr)[-12000:],
+                })
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                result.update({"ok": False, "error": str(exc)})
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        thread.join(self.test_timeout + 1)
+        if thread.is_alive():
+            return {"ok": False, "error": "pytest tests/ exceeded the test timeout."}
+        return result

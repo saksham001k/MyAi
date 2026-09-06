@@ -13,6 +13,8 @@
   <link rel="stylesheet" href="/css/progress.css">
   <script src="/js/toast.js" defer></script>
   <script src="/js/file_ingestion.js" defer></script>
+  <script src="/js/uploader.js" defer></script>
+  <script src="/js/diff_viewer.js" defer></script>
   <script src="/js/progress_manager.js" defer></script>
   <script src="/js/nav.js" defer></script>
   <script src="/js/chat.js" defer></script>
@@ -93,7 +95,7 @@
       <div id="project-files"></div><label><input id="edit-project" type="checkbox"> In Code mode, propose file changes for review</label>
       <p>Use a coding model. Review changes, apply them, then download edited files.</p>
       <div class="controls"><input id="change-id" aria-label="Saved change ID" placeholder="Paste a saved change ID"><button id="open-change" type="button">Open saved change</button></div>
-      <section id="change-review" hidden><p id="change-status" role="status"></p><pre id="change-diff"></pre><button id="apply-change" class="primary" type="button">Apply changes</button><button id="undo-change" type="button">Undo changes</button></section>
+      <section id="change-review" hidden><p id="change-status" role="status"></p><div id="change-diff"></div><button id="apply-change" class="primary" type="button">Accept all changes</button><button id="undo-change" type="button">Undo changes</button><button id="undo-last-edit" type="button">Undo last agent edit</button></section>
     </details>
 
     <div id="notice" class="notice" role="alert" hidden></div>
@@ -103,7 +105,7 @@
     </section>
     <section id="messages" aria-label="Messages" aria-live="polite"><div class="welcome"><div class="spark">✦</div><p class="eyebrow">PRIVATE, LOCAL, YOURS</p><h2>What’s on your mind?</h2><p>Ask a question, shape an idea, or give the agent a goal.<br>Everything stays in this workspace.</p><div class="suggestions"><button data-prompt="Explain a difficult concept using a simple example." type="button"><span>UNDERSTAND</span>Make something complex feel simple <b>↗</b></button><button data-prompt="Help me break my project into a practical step-by-step plan." type="button"><span>CREATE</span>Turn an idea into a clear plan <b>↗</b></button><button data-prompt="Help me debug my code. Ask me for the code and the error first." type="button"><span>BUILD</span>Work through a coding problem <b>↗</b></button></div></div></section>
     <button id="scroll-bottom" class="scroll-bottom" type="button" hidden>↓ Newest message</button>
-    <footer><form id="composer"><label class="sr-only" for="prompt">Message MyAi</label><textarea id="prompt" name="prompt" rows="2" maxlength="16000" placeholder="Ask anything. Keep it yours." required></textarea><div class="composer-bottom"><span id="composer-hint">Load a model to begin · Shift+Enter for a new line</span><button type="button" id="stop" class="subtle" hidden>Stop</button><button id="send" class="primary" type="submit" disabled>Send <span aria-hidden="true">↗</span></button></div></form><p class="footnote">Local AI can make mistakes. Check important answers.</p></footer>
+    <footer><form id="composer"><div id="upload-chips" class="file-chips"></div><label class="sr-only" for="prompt">Message MyAi</label><input id="global-file-input" type="file" multiple hidden accept=".png,.jpg,.jpeg,.webp,.gif,.py,.js,.ts,.html,.css,.json,.md,.pdf,.txt,.csv"><textarea id="prompt" name="prompt" list="file-suggestions" rows="2" maxlength="16000" placeholder="Ask anything. Keep it yours." required></textarea><datalist id="file-suggestions"></datalist><div class="composer-bottom"><button id="attach-file" type="button" class="icon-button" aria-label="Attach file" title="Attach file">📎</button><span id="composer-hint">Load a model to begin · Shift+Enter for a new line</span><button type="button" id="stop" class="subtle" hidden>Stop</button><button id="send" class="primary" type="submit" disabled>Send <span aria-hidden="true">↗</span></button></div></form><p class="footnote">Local AI can make mistakes. Check important answers.</p></footer>
   </main>
 
   <section id="command-palette" class="palette" hidden role="dialog" aria-modal="true" aria-labelledby="palette-title">

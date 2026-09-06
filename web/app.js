@@ -109,7 +109,7 @@ $("composer").onsubmit = async event => {
     progressManager.start(workspaceMode === "code" ? "code" : workspaceMode === "agent" ? "agent" : "chat");
     $("stop").hidden = false; $("stop").disabled = false; $("stop").textContent = "Stop response";
     const agentMode = workspaceMode === "agent";
-    const response = await api(agentMode ? "/api/agent/stream" : "/api/generate", "POST", {chat_id: active, prompt, mode: workspaceMode === "code" && $("edit-project").checked ? "edit" : workspaceMode, files: [...selectedFiles], auto_approve: agentMode && $("auto-approve").checked});
+    const response = await api(agentMode ? "/api/agent/stream" : "/api/generate", "POST", {chat_id: active, prompt, mode: workspaceMode === "code" && $("edit-project").checked ? "edit" : workspaceMode, files: [...selectedFiles], uploads: window.uploadedFiles?.() || [], auto_approve: agentMode && $("auto-approve").checked});
     const reader = response.body.getReader(), decoder = new TextDecoder(); let pending = "";
     while (true) {
       const {done, value} = await reader.read();
@@ -326,7 +326,8 @@ function showProposal(p) {
   currentProposal=p; $('change-review').hidden=false;
   $('change-id').value=p.id;
   $('change-status').textContent=`${p.status} · ${p.files.length} file(s)`;
-  $('change-diff').textContent=p.files.map(f=>f.diff).join('\n');
+  if (window.renderDiffFiles) window.renderDiffFiles($('change-diff'), p.files,
+    file => applyFileChange(file, false), file => applyFileChange(file, true));
   $('apply-change').disabled=p.status!=='pending';
   $('undo-change').disabled=p.status!=='applied';
 }
@@ -337,4 +338,10 @@ for(const action of ['apply','undo']) $(action+'-change').onclick=async()=>{
   catch(e){notice(e.message);}finally{setBusy(false);}
 };
 $('open-change').onclick=async()=>{try{showProposal(await (await api('/api/project/change','POST',{id:$('change-id').value.trim()})).json());}catch(e){notice(e.message);}};
+$('undo-last-edit').onclick=async()=>{try{setBusy(true);showProposal(await (await api('/api/project/undo-last','POST',{})).json());await refreshProject();}catch(e){notice(e.message);}finally{setBusy(false);}};
+async function applyFileChange(file, undo) {
+  if (busy || !currentProposal) return;
+  try { setBusy(true); showProposal(await (await api(`/api/project/${undo ? 'undo-file' : 'apply-file'}`, 'POST', {id: currentProposal.id, path: file.path})).json()); await refreshProject(); }
+  catch (e) { notice(e.message); } finally { setBusy(false); }
+}
 refreshProject().catch(e=>notice(e.message));

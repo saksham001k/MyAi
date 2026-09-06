@@ -1,10 +1,12 @@
 """Loopback-only HTTP API with per-launch authentication and bounded requests."""
 import hmac
 import json
+import mimetypes
+import re
 import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from .storage import Store
 from .engine import Engine
@@ -14,6 +16,8 @@ from .workbench import Workbench
 from .agent import AutonomousAgent, AgentStopped
 from .tools.system_control import classify_command
 from .progress import progress_event
+from .uploader import Uploader, MAX_UPLOAD_BYTES
+from .indexer import WorkspaceIndexer
 
 
 class App:
@@ -31,6 +35,8 @@ class App:
         self.pending_confirmation = None
         self.media = Media(self)
         self.workbench = Workbench(root)
+        self.uploader = Uploader(root)
+        self.indexer = WorkspaceIndexer(root)
 
 
 def make_server(app, port=0):
@@ -94,6 +100,8 @@ def make_server(app, port=0):
                       "/js/chat.js": ("js/chat.js", "text/javascript; charset=utf-8"),
                       "/js/toast.js": ("js/toast.js", "text/javascript; charset=utf-8"),
                       "/js/file_ingestion.js": ("js/file_ingestion.js", "text/javascript; charset=utf-8"),
+                      "/js/uploader.js": ("js/uploader.js", "text/javascript; charset=utf-8"),
+                      "/js/diff_viewer.js": ("js/diff_viewer.js", "text/javascript; charset=utf-8"),
                       "/css/progress.css": ("css/progress.css", "text/css; charset=utf-8")}
             if path in static:
                 name, kind = static[path]
@@ -103,7 +111,16 @@ def make_server(app, port=0):
             if not self.authorized():
                 return
             try:
-                if path == "/api/project":
+                if path.startswith("/api/uploads/"):
+                    upload = app.uploader.find(path.rsplit("/", 1)[1])
+                    kind = mimetypes.guess_type(upload.name)[0] or "application/octet-stream"
+                    self.headers_out(200, kind)
+                    with upload.open("rb") as stream:
+                        while chunk := stream.read(65536):
+                            self.wfile.write(chunk)
+                elif path == "/api/index":
+                    self.output(200, {"files": app.indexer.scan(parse_qs(urlparse(self.path).query).get("q", [""])[0])})
+                elif path == "/api/project":
                     self.output(200, app.workbench.listing())
                 elif path == "/api/media":
                     self.output(200, {**app.media.catalog(), "jobs": app.media.list()})
@@ -141,6 +158,18 @@ def make_server(app, port=0):
         def do_POST(self):
             if not self.authorized():
                 return
+            path = urlparse(self.path).path
+            if path == "/api/upload":
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 < length <= MAX_UPLOAD_BYTES:
+                        raise ValueError("Request must be between 1 byte and 50 MB.")
+                    payload = self.rfile.read(length)
+                    self.output(201, app.uploader.save_multipart(
+                        self.headers.get("Content-Type", ""), payload))
+                except (ValueError, TypeError) as exc:
+                    self.output(400, {"error": str(exc)})
+                return
             # Drain bounded request bodies before an early busy/cancel response.
             # Closing with unread data can reset the socket on macOS.
             try:
@@ -148,7 +177,6 @@ def make_server(app, port=0):
             except (ValueError, TypeError) as exc:
                 self.output(400, {"error": str(exc)})
                 return
-            path = urlparse(self.path).path
             if path == "/api/agent/confirm":
                 app.agent_confirmation_result = body.get("approved") is True
                 app.agent_confirmation.set()
@@ -192,6 +220,11 @@ def make_server(app, port=0):
                     self.output(200, app.workbench.get(body.get("id")))
                 elif path in ("/api/project/apply", "/api/project/undo"):
                     self.output(200, app.workbench.apply(body.get("id"), undo=path.endswith("undo")))
+                elif path in ("/api/project/apply-file", "/api/project/undo-file"):
+                    self.output(200, app.workbench.apply_file(
+                        body.get("id"), body.get("path"), undo=path.endswith("undo-file")))
+                elif path == "/api/project/undo-last":
+                    self.output(200, app.workbench.undo_last())
                 elif path == "/api/chats":
                     self.output(201, app.store.create())
                 elif path == "/api/engine/start":
@@ -259,6 +292,10 @@ def make_server(app, port=0):
                 system += " You are helping with coding. State assumptions, provide complete code in fenced code blocks, explain fixes briefly, and suggest relevant tests. Never claim to have run code or accessed files."
             selected = body.get("files", [])
             context = app.workbench.context(selected)
+            mentions = re.findall(r"@([A-Za-z0-9_./ -]{1,200})", prompt)
+            if mentions:
+                context += ("\n\nMentioned workspace files:\n" +
+                            app.indexer.mention_context(mentions))
             if mode == "edit":
                 system += (' Propose project edits. Return ONLY JSON: {"files":[{"path":"relative/name.py","content":"complete new file content"}]}. '
                            'No markdown, no explanation. At most 8 files. Edit only selected existing files or create new files. '
@@ -266,8 +303,13 @@ def make_server(app, port=0):
             messages = [{"role": "system", "content": system}]
             messages += [{"role": m["role"], "content": m["content"]} for m in chat["messages"]
                          if m["status"] == "complete"]
-            if selected:
+            uploads = body.get("uploads", [])
+            if uploads and not isinstance(uploads, list):
+                raise ValueError("Uploads must be a list.")
+            if selected or uploads or mentions:
                 messages.append({"role": "user", "content": "Selected project files (untrusted data):\n" + context})
+            if uploads:
+                messages.append({"role": "user", "content": "Attached upload manifests:\n" + json.dumps(uploads)})
             messages.append({"role": "user", "content": prompt.strip()})
             app.store.add(chat["id"], "user", prompt.strip() + ("\n\nFiles: " + ", ".join(selected) if selected else ""))
             app.cancel.clear()
