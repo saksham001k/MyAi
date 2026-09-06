@@ -2,6 +2,7 @@ import path from "node:path";
 import type { ProcessResult, ProcessSandbox } from "./sandbox.js";
 import { extractSymbolAtLocation, type SymbolContext } from "../indexer/slicer.js";
 import { patchFileRange } from "../tools/filePatcher.js";
+import type { LLMProvider } from "../providers/llm.js";
 
 export interface TracebackLocation {
   filePath: string;
@@ -14,6 +15,11 @@ export interface HealingResult {
   attempts: number;
   logs: string[];
 }
+
+export type PatchApproval = (
+  context: SymbolContext,
+  replacement: string
+) => Promise<boolean>;
 
 export function parseTraceback(error: string, cwd = process.cwd()): TracebackLocation | null {
   const pattern = /(?:^|[\s("'`])((?:[A-Za-z]:[\\/]|\/|\.{0,2}[\\/])?[^()\s"'`]+?\.(?:ts|tsx|js|jsx)):(\d+)(?::(\d+))?/m;
@@ -58,12 +64,14 @@ function tokenize(command: string): string[] {
 export class SelfHealingEngine {
   public constructor(
     private readonly sandbox: ProcessSandbox,
-    private readonly cwd = process.cwd()
+    private readonly cwd = process.cwd(),
+    private readonly provider?: LLMProvider,
+    private readonly approvePatch?: PatchApproval
   ) {}
 
   public async diagnoseAndRepair(
     testCommand: string,
-    patchGenerator: (error: string, context: SymbolContext) => Promise<string>,
+    patchGenerator?: ((error: string, context: SymbolContext) => Promise<string>) | undefined,
     maxAttempts = 3
   ): Promise<HealingResult> {
     if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
@@ -80,7 +88,16 @@ export class SelfHealingEngine {
       if (!location) break;
       const context = extractSymbolAtLocation(location.filePath, location.line);
       if (!context) break;
-      const replacement = await patchGenerator(output, context);
+      const replacement = this.provider
+        ? await this.provider.generatePatch(
+            "Repair the failing TypeScript symbol with the smallest correct change.",
+            context,
+            output
+          )
+        : patchGenerator
+          ? await patchGenerator(output, context)
+          : (() => { throw new Error("A patch generator or LLM provider is required."); })();
+      if (this.approvePatch && !(await this.approvePatch(context, replacement))) break;
       if (!(await patchFileRange(
         context.filePath,
         context.startLine,

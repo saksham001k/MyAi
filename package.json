@@ -3,12 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "myai": "./dist/cli.js"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('node:fs').cpSync('dist/src', 'dist', {recursive:true})\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
     "execa": "^9.6.0"
   },
   "devDependencies": {
