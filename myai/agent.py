@@ -1,11 +1,11 @@
 """Bounded autonomous Thought/Action/Observation/Final Answer execution."""
 import json
 import re
-import subprocess
-import threading
 from typing import Any, Dict, Optional
 
 from .prompts import AGENT_SYSTEM_PROMPT
+from .repair import SelfHealingLoop
+from .sandbox import SandboxRunner
 from .tools.system_control import classify_risk, is_catastrophic, require_approval
 
 
@@ -15,7 +15,8 @@ class AgentStopped(RuntimeError):
 
 class AutonomousAgent:
     def __init__(self, engine, max_iterations: int = 10, tool_call=None,
-                 auto_approve: bool = False):
+                 auto_approve: bool = False, workspace_root=None,
+                 repair_callback=None):
         if callable(max_iterations) and tool_call is None:
             tool_call, max_iterations = max_iterations, 10
         self.engine = engine
@@ -24,6 +25,8 @@ class AutonomousAgent:
         self.confirmation_callback = None
         self.auto_approve = auto_approve is True
         self.test_timeout = 120
+        self.workspace_root = workspace_root
+        self.repair_callback = repair_callback
 
     @staticmethod
     def parse_response(response: str) -> Dict[str, Any]:
@@ -130,26 +133,29 @@ class AutonomousAgent:
             callback(event)
 
     def _run_post_edit_tests(self) -> dict:
-        """Run the repository tests after an edit without blocking tool execution."""
-        result = {}
-
-        def worker():
-            try:
-                completed = subprocess.run(
-                    ["pytest", "tests/"], capture_output=True, text=True,
-                    timeout=self.test_timeout, check=False
-                )
-                result.update({
-                    "ok": completed.returncode == 0,
-                    "returncode": completed.returncode,
-                    "output": (completed.stdout + completed.stderr)[-12000:],
-                })
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                result.update({"ok": False, "error": str(exc)})
-
-        thread = threading.Thread(target=worker, daemon=True)
-        thread.start()
-        thread.join(self.test_timeout + 1)
-        if thread.is_alive():
-            return {"ok": False, "error": "pytest tests/ exceeded the test timeout."}
-        return result
+        """Run pytest in the workspace sandbox and return repairable diagnostics."""
+        if self.workspace_root is None:
+            return {"ok": False, "error": "No workspace root configured for post-edit tests."}
+        runner = SandboxRunner(self.workspace_root)
+        loop = SelfHealingLoop(runner, max_attempts=2)
+        result, reports = loop.run(
+            ["pytest", "tests/"],
+            repair=self.repair_callback,
+            timeout=self.test_timeout,
+        )
+        output = (result.stdout + result.stderr)[-12000:]
+        return {
+            "ok": result.ok,
+            "returncode": result.returncode,
+            "timed_out": result.timed_out,
+            "output": output,
+            "failures": [
+                {
+                    "path": str(report.location.path) if report.location else None,
+                    "line": report.location.line if report.location else None,
+                    "symbol": report.location.symbol if report.location else None,
+                    "trace": report.trace,
+                }
+                for report in reports
+            ],
+        }

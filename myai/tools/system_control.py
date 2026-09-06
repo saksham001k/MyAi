@@ -60,6 +60,10 @@ _CATASTROPHIC_PATTERNS = (
     r"(^|[\s;&|])(?:diskpart|fdisk|parted)(?:\s|$)",
     r"(^|[\s;&|])(?:dd\s+[^;\n]*\bof=/dev/(?:sd[a-z]|nvme\d+n\d+)|wipefs)(?:\s|$)",
 )
+_NETWORK_COMMANDS = {
+    "curl", "wget", "nc", "netcat", "ssh", "scp", "sftp", "telnet",
+    "ftp", "http", "httpie", "aria2c",
+}
 
 
 def is_catastrophic(command_or_action):
@@ -99,7 +103,17 @@ def require_approval(command_or_action, approved=False):
         )
 
 
-def execute_command(command, timeout=30, confirm=False):
+def is_network_command(command_or_action):
+    args = shlex.split(command_or_action) if isinstance(command_or_action, str) else list(command_or_action)
+    executable = os.path.basename(args[0]).lower() if args else ""
+    text = " ".join(args)
+    return executable in _NETWORK_COMMANDS or bool(
+        re.search(r"\bgit\s+(?:clone|fetch|pull|push|remote|submodule)\b", text, re.IGNORECASE)
+    )
+
+
+def execute_command(command, timeout=30, confirm=False, force=False,
+                    confirmation_token=None):
     """Run one executable with arguments, never through a shell."""
     if not isinstance(command, (str, list, tuple)):
         raise TypeError("command must be a string or an argument sequence")
@@ -109,6 +123,12 @@ def execute_command(command, timeout=30, confirm=False):
     if not args or any(not isinstance(arg, str) or not arg for arg in args):
         raise ValueError("command must contain a non-empty executable")
     require_approval(args, approved=confirm)
+    if is_network_command(args) and not (
+        force is True or confirmation_token == "KISS-CONFIRMED"
+    ):
+        raise ConfirmationRequired(
+            "Network commands require force=True or the KISS-CONFIRMED token."
+        )
     try:
         completed = subprocess.run(
             args,

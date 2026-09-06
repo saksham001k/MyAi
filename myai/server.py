@@ -405,7 +405,8 @@ def make_server(app, port=0):
 
             answer = []
             state, error = "complete", None
-            agent = AutonomousAgent(app.engine, auto_approve=auto_approve)
+            agent = AutonomousAgent(app.engine, auto_approve=auto_approve,
+                                    workspace_root=app.root)
 
             def approval(tool, arguments):
                 confirm(tool, arguments)
