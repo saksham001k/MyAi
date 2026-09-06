@@ -62,6 +62,14 @@ def _arguments(command: str | Sequence[str]) -> list[str]:
     return args
 
 
+def _process_command(command: str | Sequence[str]) -> list[str]:
+    if not isinstance(command, str):
+        return _arguments(command)
+    if os.name == "nt":
+        return [os.environ.get("ComSpec", "cmd.exe"), "/d", "/s", "/c", command]
+    return ["/bin/sh", "-c", command]
+
+
 def is_network_command(args: Sequence[str]) -> bool:
     executable = Path(args[0]).name.lower()
     return executable in _NETWORK_COMMANDS or bool(_NETWORK_GIT_ACTIONS.search(" ".join(args)))
@@ -93,6 +101,7 @@ class SandboxRunner:
         if not isinstance(request, ExecutionRequest):
             request = ExecutionRequest(request, self.root, self.default_timeout)
         args = _arguments(request.command)
+        process_args = _process_command(request.command)
         cwd = request.cwd.resolve()
         if not cwd.is_relative_to(self.root):
             raise ValueError("Sandbox working directory must be inside the workspace.")
@@ -102,7 +111,7 @@ class SandboxRunner:
             env.update({str(key): str(value) for key, value in request.env.items()})
         try:
             completed = subprocess.run(
-                args, cwd=cwd, env=env, shell=False, capture_output=True,
+                process_args, cwd=cwd, env=env, shell=False, capture_output=True,
                 text=True, timeout=request.timeout, check=False,
             )
             return ExecutionResult(tuple(args), completed.returncode,
@@ -150,20 +159,31 @@ class ExecutionSandbox:
 
     def run(self, command, timeout=None, cwd=None, env=None):
         args = _arguments(command)
+        process_args = _process_command(command)
         working = (Path(cwd) if cwd else self.workspace_root).resolve()
         if not working.is_relative_to(self.workspace_root):
             raise ValueError("Working directory must be inside the project workspace.")
         ensure_policy(ExecutionRequest(args, working, timeout or self.timeout), args)
         started = time.monotonic()
         process = subprocess.Popen(
-            args, cwd=working, env={**{"PATH": os.environ.get("PATH", "")}, **(env or {})},
+            process_args, cwd=working, env={**{"PATH": os.environ.get("PATH", "")}, **(env or {})},
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, shell=False,
         )
         try:
             stdout, stderr = process.communicate(timeout=timeout or self.timeout)
         except subprocess.TimeoutExpired as exc:
-            process.kill()
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/pid", str(process.pid), "/f", "/t"],
+                    capture_output=True, check=False,
+                )
+            else:
+                process.terminate()
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    process.kill()
             stdout, stderr = process.communicate()
             stdout = stdout or (exc.stdout or "")
             stderr = (stderr or (exc.stderr or "")) + "\nCommand timed out."

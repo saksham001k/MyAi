@@ -1,7 +1,5 @@
 """Own only the llama-server process started by this application."""
 import json
-import os
-import platform
 import secrets
 import socket
 import subprocess
@@ -10,6 +8,7 @@ import time
 import urllib.error
 import urllib.request
 from .runtime import executable
+from .platform import detect_platform
 from .hardware import detect_hardware
 from .model_verifier import verify_model_hash
 from .tools import (click_and_type, execute_command, inspect_system, navigate,
@@ -17,9 +16,7 @@ from .tools import (click_and_type, execute_command, inspect_system, navigate,
 
 
 def platform_tag():
-    machine = platform.machine().lower()
-    arch = {"amd64": "x86_64", "aarch64": "arm64"}.get(machine, machine)
-    return f"{platform.system().lower()}-{arch}"
+    return detect_platform()["runtime_tag"]
 
 
 class Engine:
@@ -36,8 +33,8 @@ class Engine:
 
     @property
     def binary(self):
-        name = "llama-server.exe" if os.name == "nt" else "llama-server"
-        return executable(self.root / "runtime" / platform_tag(), name)
+        info = detect_platform()
+        return executable(self.root / "runtime" / info["runtime_tag"], info["executable"])
 
     def models(self):
         return [{"name": p.name, "bytes": p.stat().st_size}

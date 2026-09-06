@@ -39,6 +39,16 @@ function commandText(command: string | readonly string[]): string {
   return typeof command === "string" ? command : command.join(" ");
 }
 
+function shellCommand(command: string): [string, string[]] {
+  return process.platform === "win32"
+    ? [process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", command]]
+    : ["/bin/sh", ["-c", command]];
+}
+
+function commandParts(command: string | readonly string[]): [string, string[]] {
+  return typeof command === "string" ? shellCommand(command) : [command[0], command.slice(1)];
+}
+
 export class ProcessSandbox {
   public constructor(private readonly defaultTimeoutMs = 15_000) {
     if (!Number.isFinite(defaultTimeoutMs) || defaultTimeoutMs <= 0) {
@@ -57,24 +67,19 @@ export class ProcessSandbox {
       throw new RangeError("timeoutMs must be greater than zero");
     }
 
-    const child: ResultPromise = typeof command !== "string"
-      ? execa(command[0], command.slice(1), {
+    const [executable, args] = commandParts(command);
+    const child: ResultPromise = execa(executable, args, {
           cwd: options.cwd,
           env: options.env,
           timeout: timeoutMs,
           killSignal: "SIGTERM",
-          reject: false
-        })
-      : execa(command, {
-          cwd: options.cwd,
-          env: options.env,
-          timeout: timeoutMs,
-          killSignal: "SIGTERM",
-          shell: false,
           reject: false
         });
     const result = await child;
     const timedOut = result.timedOut === true;
+    if (timedOut && process.platform === "win32" && child.pid) {
+      await execa("taskkill", ["/pid", String(child.pid), "/f", "/t"], { reject: false });
+    }
     const stdout = String(result.stdout ?? "");
     const stderr = String(result.stderr ?? "");
     return {
@@ -93,15 +98,20 @@ export class ProcessSandbox {
   ): { stop: () => void } {
     assertCommandAllowed(command, options);
     const timeoutMs = options.timeoutMs ?? 30_000;
-    const child = typeof command !== "string"
-      ? execa(command[0], command.slice(1), {
-          cwd: options.cwd, env: options.env, shell: false, reject: false,
-          timeout: timeoutMs, killSignal: "SIGTERM", stdio: "ignore"
-        })
-      : execa(command, {
-          cwd: options.cwd, env: options.env, shell: false, reject: false,
-          timeout: timeoutMs, killSignal: "SIGTERM", stdio: "ignore"
-        });
-    return { stop: () => child.kill("SIGTERM") };
+    const [executable, args] = commandParts(command);
+    const child = execa(executable, args, {
+      cwd: options.cwd, env: options.env, shell: false, reject: false,
+      timeout: timeoutMs, killSignal: "SIGTERM", stdio: "ignore"
+    });
+    return {
+      stop: () => {
+        if (process.platform === "win32" && child.pid) {
+          void execa("taskkill", ["/pid", String(child.pid), "/f", "/t"], { reject: false });
+        } else {
+          child.kill("SIGTERM");
+          setTimeout(() => child.kill("SIGKILL"), 1_000);
+        }
+      }
+    };
   }
 }

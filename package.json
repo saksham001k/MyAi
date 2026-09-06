@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc && node -e \"require('node:fs').cpSync('dist/src', 'dist', {recursive:true})\"",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "python3 run.py --no-browser"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

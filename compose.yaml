@@ -1,0 +1,10 @@
+services:
+  myai:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./runtime:/app/runtime:ro
+    restart: unless-stopped
