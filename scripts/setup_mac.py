@@ -127,9 +127,9 @@ def install_runtime(root):
         if (destination / "llama-server").is_file():
             print("Keeping the existing runtime.", flush=True)
             return
-        if any(destination.iterdir()):
-            raise ValueError(f"Runtime folder is incomplete: {destination}. Existing files were preserved.")
-        destination.rmdir()
+        # Studio may already have installed sd-cli in this shared platform
+        # folder. Preserve those files and add the text runtime beside them.
+        destination.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(RELEASES, headers={"User-Agent": "MyAi-setup/0.1"})
     with urllib.request.urlopen(request, timeout=30) as response:
         tag, asset = choose_asset(json.load(response))
@@ -140,8 +140,9 @@ def install_runtime(root):
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".myai-setup-", dir=destination.parent) as tmp:
         stage = Path(tmp) / "installed"
-        extract(archive, stage / "vendor")
-        servers = [p for p in (stage / "vendor").rglob("llama-server") if p.is_file() and not p.is_symlink()]
+        vendor = stage / "llama-vendor"
+        extract(archive, vendor)
+        servers = [p for p in vendor.rglob("llama-server") if p.is_file() and not p.is_symlink()]
         if len(servers) != 1:
             raise ValueError("Expected one llama-server executable in the downloaded runtime")
         servers[0].chmod(0o755)
@@ -150,7 +151,13 @@ def install_runtime(root):
         wrapper.write_text('#!/bin/sh\nBASE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\nexec "$BASE"/' + shlex.quote(relative) + ' "$@"\n')
         wrapper.chmod(0o755)
         (stage / "source.json").write_text(json.dumps({"release": tag, "asset": asset["name"], "sha256": asset["digest"]}, indent=2))
-        os.replace(stage, destination)
+        # Merge into an existing platform directory so diffusion-vendor and
+        # sd-cli remain usable. The temporary stage is fully validated first.
+        for item in stage.iterdir():
+            target = destination / item.name
+            if target.exists():
+                raise ValueError(f"Cannot install runtime without overwriting existing file: {target}")
+            os.replace(item, target)
 
 
 def main():
