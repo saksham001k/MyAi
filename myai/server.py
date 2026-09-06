@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from .storage import Store
 from .engine import Engine
+from .media import Media
 
 
 class App:
@@ -20,6 +21,7 @@ class App:
         self.token = secrets.token_urlsafe(32)
         self.busy = threading.Lock()
         self.cancel = threading.Event()
+        self.media = Media(self)
 
 
 def make_server(app, port=0):
@@ -33,7 +35,7 @@ def make_server(app, port=0):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
             self.end_headers()
 
         def output(self, code, obj):
@@ -76,9 +78,17 @@ def make_server(app, port=0):
             if not self.authorized():
                 return
             try:
-                if path == "/api/status":
+                if path == "/api/media":
+                    self.output(200, {**app.media.catalog(), "jobs": app.media.list()})
+                elif path.startswith("/api/media/result/"):
+                    result = app.media.result(path.rsplit("/", 1)[1])
+                    self.headers_out(200, "image/png" if result.suffix == ".png" else "video/x-msvideo")
+                    with result.open("rb") as stream:
+                        while chunk := stream.read(65536):
+                            self.wfile.write(chunk)
+                elif path == "/api/status":
                     self.output(200, {**app.engine.status(), "models": app.engine.models(),
-                                      "busy": app.busy.locked(), "version": "0.1.0"})
+                                      "busy": app.busy.locked(), "version": "0.2.0"})
                 elif path == "/api/chats":
                     self.output(200, app.store.list())
                 elif path.startswith("/api/chats/"):
@@ -92,6 +102,16 @@ def make_server(app, port=0):
             if not self.authorized():
                 return
             path = urlparse(self.path).path
+            if path == "/api/media/start":
+                try:
+                    self.output(202, app.media.start(self.body()))
+                except (ValueError, TypeError) as exc:
+                    self.output(400, {"error": str(exc)})
+                return
+            if path == "/api/media/cancel":
+                app.media.cancel_event.set()
+                self.output(200, {"ok": True})
+                return
             if path == "/api/cancel":
                 app.cancel.set()
                 self.output(200, {"ok": True})
@@ -153,7 +173,13 @@ def make_server(app, port=0):
             if not app.engine.status()["running"]:
                 raise ValueError("Load a model first.")
             chat = app.store.get(body.get("chat_id"))
-            messages = [{"role": "system", "content": "You are MyAi, a helpful local assistant. Be clear and honest about uncertainty."}]
+            mode = body.get("mode", "chat")
+            if mode not in ("chat", "code"):
+                raise ValueError("Unknown chat mode")
+            system = "You are MyAi, a helpful local assistant. You have no web access. Be clear and honest about uncertainty."
+            if mode == "code":
+                system += " You are helping with coding. State assumptions, provide complete code in fenced code blocks, explain fixes briefly, and suggest relevant tests. Never claim to have run code or accessed files."
+            messages = [{"role": "system", "content": system}]
             messages += [{"role": m["role"], "content": m["content"]} for m in chat["messages"]
                          if m["status"] == "complete"]
             messages.append({"role": "user", "content": prompt.strip()})

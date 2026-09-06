@@ -4,7 +4,18 @@
 
 MyAi is a local-first AI chat application by Saksham Katiyar. It runs a compatible GGUF model through a dedicated llama.cpp server and keeps conversations beside the app, ready to move with the workspace.
 
-**Status: v0.1.0 source implementation. Real-model and physical pendrive acceptance testing are still required.** This repository contains working application code, tests, launchers, and packaging workflows—not pretrained model weights or runtime binaries. It does not claim to outperform PortableLM yet.
+**Status: v0.2.0 source implementation. Basic Qwen3 chat has run on the user's M4. Additional coding models, image/video generation and physical pendrive acceptance remain unverified.** This repository contains working application code, tests, launchers, and packaging workflows—not pretrained model weights or runtime binaries. It does not claim to outperform PortableLM yet.
+
+## New in 0.2 — Code, Images and Video
+
+- Code workspace with coding instructions and readable fenced code blocks.
+- Optional Qwen2.5-Coder 1.5B and 3B model download packs.
+- Stable Diffusion 1.5 and SDXL image-generation adapters.
+- Experimental Wan2.1 1.3B short-video adapter with explicit opt-in.
+- Persistent media jobs, cancellation, authenticated output downloads, and automatic chat-model unloading before diffusion.
+- Model downloads verified against publisher hashes and pinned revisions.
+
+These are implemented integrations, not bundled model weights or hardware performance guarantees. Media requires a separate compatible diffusion runtime. Automatic runtime installation depends on an available checksummed upstream macOS ARM64 archive; missing runtime builds remain an explicit setup limitation. Physical testing is deferred at the user's request. See [Studio setup and limits](docs/STUDIO.md).
 
 ## What works in this version
 

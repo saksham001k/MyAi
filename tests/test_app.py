@@ -133,6 +133,16 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.request(f"/api/chats/{cid}", method="DELETE")[0], 200)
         self.assertEqual(self.request(f"/api/chats/{cid}")[0], 404)
 
+    def test_code_mode_and_media_api_auth(self):
+        cid = self.chat()
+        self.request("/api/generate", {"chat_id": cid, "prompt": "Write a function", "mode": "code"})
+        self.assertIn("coding", self.engine.seen[0]["content"])
+        self.assertEqual(self.request("/api/media", authorized=False)[0], 401)
+        state = json.loads(self.request("/api/media")[1])
+        self.assertEqual(len(state["presets"]), 3)
+        self.assertEqual(self.request("/api/media/start", {"preset": "sd15", "prompt": "cat"})[0], 400)
+        self.assertEqual(self.request("/api/media/result/invalid")[0], 404)
+
 
 class PortableStorageTests(unittest.TestCase):
     def test_workspace_relocation_and_backup(self):

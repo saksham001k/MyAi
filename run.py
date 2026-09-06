@@ -22,7 +22,7 @@ def main():
     app = App(root, assets)
     server = make_server(app, args.port)
     url = f"http://127.0.0.1:{server.server_port}/#token={app.token}"
-    print(f"MyAi 0.1.0 | workspace: {root}\nOpen this private session URL:\n{url}\nKeep this terminal open. Press Ctrl+C to stop before ejecting the drive.", flush=True)
+    print(f"MyAi 0.2.0 | workspace: {root}\nOpen this private session URL:\n{url}\nKeep this terminal open. Press Ctrl+C to stop before ejecting the drive.", flush=True)
 
     def stop(*_):
         app.cancel.set()
@@ -35,6 +35,7 @@ def main():
     try:
         server.serve_forever()
     finally:
+        app.media.close()
         app.engine.stop()
         # Allow the request thread to persist an interrupted response before exit.
         with app.busy:

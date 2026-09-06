@@ -52,7 +52,7 @@ function renderHistory() {
 function message(role, content, status = "complete") {
   const article = document.createElement("article"); article.className = `message ${role}`;
   const label = document.createElement("div"); label.className = "role"; label.textContent = role === "user" ? "YOU" : "MYAI";
-  const text = document.createElement("div"); text.className = "content"; text.textContent = content;
+  const text = document.createElement("div"); text.className = "content"; renderContent(text, content);
   article.append(label, text);
   if (status !== "complete") { const hint = document.createElement("small"); hint.textContent = `Response ${status}`; article.append(hint); }
   const copy = document.createElement("button"); copy.className = "copy"; copy.textContent = "Copy";
@@ -87,7 +87,7 @@ $("composer").onsubmit = async event => {
     if (!active) { const chat = await (await api("/api/chats", "POST", {})).json(); active = chat.id; $("messages").replaceChildren(); }
     message("user", prompt); responseText = message("assistant", ""); $("prompt").value = "";
     $("stop").hidden = false; $("stop").disabled = false; $("stop").textContent = "Stop response";
-    const response = await api("/api/generate", "POST", {chat_id: active, prompt});
+    const response = await api("/api/generate", "POST", {chat_id: active, prompt, mode: workspaceMode});
     const reader = response.body.getReader(), decoder = new TextDecoder(); let pending = "";
     while (true) {
       const {done, value} = await reader.read();
@@ -112,3 +112,54 @@ $("export").onclick = async () => {
 };
 bindSuggestions();
 Promise.all([refresh(), listChats()]).catch(e => notice(e.message));
+
+let workspaceMode = "chat", mediaKind = "image", mediaPoll = null;
+const mediaURLs = [];
+function clearMediaURLs() { for (const url of mediaURLs.splice(0)) URL.revokeObjectURL(url); }
+document.querySelectorAll("[data-workspace]").forEach(button => button.onclick = async () => {
+  if (busy) return notice("Wait for the active operation to finish.");
+  const mode = button.dataset.workspace; const studio = mode === "image" || mode === "video";
+  document.querySelectorAll("[data-workspace]").forEach(b => b.classList.toggle("primary", b === button));
+  $("studio").hidden = !studio; $("messages").hidden = studio; document.querySelector("footer").hidden = studio;
+  document.querySelector(".engine-bar").hidden = studio; $("settings").hidden = studio;
+  if (studio) { mediaKind = mode; $("video-opt-in").hidden = mode !== "video"; await refreshMedia().catch(e => notice(e.message)); }
+  else { workspaceMode = mode; $("prompt").placeholder = mode === "code" ? "Paste code, describe a bug, or ask for an implementation…" : "Ask anything. Keep it yours."; await refresh().catch(e => notice(e.message)); }
+});
+async function refreshMedia() {
+  const state = await (await api("/api/media")).json();
+  const selected = $("media-preset").value; $("media-preset").replaceChildren();
+  for (const p of state.presets.filter(p => p.kind === mediaKind)) $("media-preset").add(new Option(p.name + (p.ready ? " · installed" : " · setup needed"), p.id));
+  if (state.presets.some(p => p.id === selected && p.kind === mediaKind)) $("media-preset").value = selected;
+  $("studio-hint").textContent = "Generation unloads the chat model to free memory. " + (state.runtime_found ? "Missing models can be installed with scripts/setup_models.py; see docs/STUDIO.md." : "Diffusion runtime setup is required; see docs/STUDIO.md.");
+  const current = state.jobs.find(j => j.status === "running");
+  $("media-status").textContent = current ? "Generating locally… This may take several minutes. You can leave this tab open or return later." : "Ready for your next creation.";
+  $("media-generate").disabled = Boolean(current);
+  $("media-stop").disabled = !current;
+  $("creations").replaceChildren(); clearMediaURLs();
+  for (const job of state.jobs.filter(j => j.kind === mediaKind)) {
+    const card = document.createElement("article"); card.className = "creation";
+    const title = document.createElement("p"); title.textContent = job.prompt;
+    const detail = document.createElement("small"); detail.textContent = `${job.status} · seed ${job.seed} · ${job.seconds || 0}s` + (job.error ? ` · ${job.error}` : ""); card.append(title, detail);
+    if (job.status === "complete") {
+      const button = document.createElement("button"); button.textContent = job.kind === "video" ? "Download video (AVI)" : "View / download image";
+      button.onclick = async () => { try { const blob = await (await api(`/api/media/result/${job.id}`)).blob(); const url = URL.createObjectURL(blob); mediaURLs.push(url); if(job.kind === "image") {const img = document.createElement("img"); img.src = url; img.alt = job.prompt; card.append(img);} const link = document.createElement("a"); link.href = url; link.download = `MyAi-${job.id}.${job.kind === "video" ? "avi" : "png"}`; link.textContent = "Save file ↓"; card.append(link); if (job.kind === "video") link.click(); button.disabled = true; } catch(e) { notice(e.message); } }; card.append(button);
+    }
+    $("creations").append(card);
+  }
+  clearTimeout(mediaPoll); if (current) mediaPoll = setTimeout(() => refreshMedia().catch(e => notice(e.message)), 2500);
+}
+$("media-generate").onclick = async () => {
+  $("media-generate").disabled = true; notice();
+  try { await api("/api/media/start", "POST", {preset: $("media-preset").value, prompt: $("media-prompt").value, steps: Number($("media-steps").value), seed: Number($("media-seed").value), experimental: $("video-confirm").checked}); } catch(e) { notice(e.message); }
+  await refreshMedia().catch(e => notice(e.message));
+};
+$("media-stop").onclick = async () => { try {await api("/api/media/cancel", "POST", {}); await refreshMedia();} catch(e) {notice(e.message);} };
+
+function renderContent(target, value) {
+  target.replaceChildren();
+  const blocks = value.split(/```[^\n]*\n([\s\S]*?)```/g);
+  blocks.forEach((part, index) => {
+    if (index % 2) { const pre = document.createElement("pre"), code = document.createElement("code"); code.textContent = part; pre.append(code); target.append(pre); }
+    else { part.split(/\*\*([^*]+)\*\*/g).forEach((piece, i) => { if(i % 2) { const strong = document.createElement("strong"); strong.textContent = piece; target.append(strong); } else target.append(document.createTextNode(piece)); }); }
+  });
+}
