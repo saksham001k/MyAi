@@ -10,6 +10,10 @@ import time
 import urllib.error
 import urllib.request
 from .runtime import executable
+from .hardware import detect_hardware
+from .model_verifier import verify_model_hash
+from .tools import (click_and_type, execute_command, inspect_system, navigate,
+                    take_screenshot)
 
 
 def platform_tag():
@@ -19,8 +23,9 @@ def platform_tag():
 
 
 class Engine:
-    def __init__(self, root):
+    def __init__(self, root, hardware=None):
         self.root = root
+        self.hardware = hardware
         self.process = None
         self.model = None
         self.port = None
@@ -39,12 +44,30 @@ class Engine:
                 for p in sorted((self.root / "models").glob("*.gguf"))
                 if p.is_file() and not p.is_symlink()]
 
+    @staticmethod
+    def tools():
+        return {
+            "navigate": navigate,
+            "take_screenshot": take_screenshot,
+            "click_and_type": click_and_type,
+            "inspect_system": inspect_system,
+            "execute_command": execute_command,
+        }
+
+    def call_tool(self, name, **arguments):
+        """Invoke one of the explicitly allow-listed local agent tools."""
+        try:
+            tool = self.tools()[name]
+        except KeyError as exc:
+            raise ValueError(f"Unknown tool: {name}") from exc
+        return tool(**arguments)
+
     def status(self):
         running = self.process is not None and self.process.poll() is None
         return {"running": running, "model": self.model if running else None,
                 "runtime_found": self.binary.is_file(), "platform": platform_tag()}
 
-    def start(self, name, context=4096, gpu_layers=0):
+    def start(self, name, context=4096, gpu_layers=None, model_sha256=None):
         if name not in {m["name"] for m in self.models()}:
             raise ValueError("Select a GGUF model from the models folder.")
         if not self.binary.is_file():
@@ -55,10 +78,19 @@ class Engine:
                 sock.bind(("127.0.0.1", 0))
                 self.port = sock.getsockname()[1]
             path = self.root / "models" / name
+            valid, computed_hash = verify_model_hash(path, model_sha256)
+            if not valid:
+                raise ValueError(
+                    f"Model checksum verification failed "
+                    f"(computed {computed_hash or 'none'})."
+                )
+            hardware = self.hardware or detect_hardware()
+            selected_layers = hardware.gpu_layers if gpu_layers is None else gpu_layers
             self.log = open(self.root / "data" / "engine.log", "wb")
             args = [str(self.binary), "--model", str(path), "--host", "127.0.0.1",
                     "--port", str(self.port), "--api-key", self.key,
-                    "--ctx-size", str(context), "--n-gpu-layers", str(gpu_layers),
+                    "--ctx-size", str(context), "--n-gpu-layers", str(selected_layers),
+                    "--threads", str(hardware.threads),
                     "--parallel", "1"]
             try:
                 self.process = subprocess.Popen(args, cwd=self.binary.parent,

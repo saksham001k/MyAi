@@ -6,9 +6,9 @@ import subprocess
 import threading
 import time
 import uuid
-from pathlib import Path
 from .engine import platform_tag
 from .runtime import executable
+from .progress import progress_event
 
 PRESETS = {
     "sd15": {"name": "Stable Diffusion 1.5", "kind": "image", "files": {"-m": "images/v1-5-pruned-emaonly.safetensors"}},
@@ -117,7 +117,8 @@ class Media:
             self.cancel_event.clear()
             job = {"id": jid, "kind": kind, "preset": body["preset"], "prompt": body["prompt"],
                    "seed": body.get("seed", 42), "steps": body.get("steps", 20), "status": "running",
-                   "created": time.time(), "error": None}
+                   "created": time.time(), "error": None,
+                   "progress": progress_event("studio", "Structuring composition", 5)}
             self.save(job)
             self.thread = threading.Thread(target=self.run, args=(job, args, output), daemon=True)
             self.thread.start()
@@ -134,8 +135,18 @@ class Media:
             with (output.parent / "engine.log").open("wb") as log:
                 process = subprocess.Popen(args, cwd=output.parent, stdout=log, stderr=subprocess.STDOUT)
                 while process.poll() is None:
+                    elapsed = time.monotonic() - started
+                    percentage = min(95, max(5, int(elapsed / 1800 * 90)))
+                    job["progress"] = progress_event(
+                        "studio",
+                        "Filling colors & lighting" if percentage >= 50
+                        else "Structuring composition",
+                        percentage,
+                    )
+                    self.save(job)
                     if self.cancel_event.wait(0.2):
                         job["status"] = "cancelled"
+                        job["progress"] = progress_event("studio", "Generation cancelled", 100)
                         break
                     if time.monotonic() - started > 1800:
                         raise RuntimeError("Generation exceeded 30 minutes; try an image or fewer steps.")
@@ -143,8 +154,10 @@ class Media:
                     if process.returncode != 0 or not output.is_file() or output.stat().st_size == 0:
                         raise RuntimeError("Diffusion failed. See this creation's engine.log; runtime/model compatibility may differ.")
                     job["status"] = "complete"
+                    job["progress"] = progress_event("studio", "Refining textures", 100)
         except Exception as exc:
             job["status"], job["error"] = "error", str(exc)
+            job["progress"] = progress_event("studio", "Generation stopped", 100, str(exc))
         finally:
             if process is not None and process.poll() is None:
                 process.terminate()

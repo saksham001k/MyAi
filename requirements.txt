@@ -1,2 +1,2 @@
-# The source application uses Python 3.10+ standard library only.
-# No pip packages are needed to run or unit-test MyAi.
+psutil>=5.9
+playwright>=1.40

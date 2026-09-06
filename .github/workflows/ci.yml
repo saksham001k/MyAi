@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -r requirements.txt flake8 pytest
+      - run: flake8 --ignore=E501,E128,W503,W504 myai/agent.py myai/prompts.py myai/hardware.py myai/model_verifier.py myai/engine.py myai/server.py myai/tools tests/test_agent.py tests/test_hardware.py tests/test_model_verifier.py tests/test_system_control.py run.py
+      - run: python -m pytest

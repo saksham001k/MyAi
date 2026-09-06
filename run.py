@@ -7,6 +7,8 @@ import threading
 import webbrowser
 from pathlib import Path
 
+from myai.engine import Engine
+from myai.hardware import detect_hardware
 from myai.server import App, make_server
 
 
@@ -19,7 +21,8 @@ def main():
     frozen = getattr(sys, "frozen", False)
     root = (args.root or (Path(sys.executable).parent if frozen else Path(__file__).parent)).resolve()
     assets = Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "web"
-    app = App(root, assets)
+    # Detect once at startup; Engine still detects lazily when embedded directly.
+    app = App(root, assets, Engine(root, hardware=detect_hardware()))
     server = make_server(app, args.port)
     url = f"http://127.0.0.1:{server.server_port}/#token={app.token}"
     print(f"MyAi 0.2.0 | workspace: {root}\nOpen this private session URL:\n{url}\nKeep this terminal open. Press Ctrl+C to stop before ejecting the drive.", flush=True)

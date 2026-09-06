@@ -10,6 +10,9 @@ from .storage import Store
 from .engine import Engine
 from .media import Media
 from .workbench import Workbench
+from .agent import AutonomousAgent, AgentStopped
+from .tools.system_control import classify_command
+from .progress import progress_event
 
 
 class App:
@@ -22,6 +25,9 @@ class App:
         self.token = secrets.token_urlsafe(32)
         self.busy = threading.Lock()
         self.cancel = threading.Event()
+        self.agent_confirmation = threading.Event()
+        self.agent_confirmation_result = False
+        self.pending_confirmation = None
         self.media = Media(self)
         self.workbench = Workbench(root)
 
@@ -75,7 +81,9 @@ def make_server(app, port=0):
             path = urlparse(self.path).path
             static = {"/": ("index.html", "text/html; charset=utf-8"),
                       "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-                      "/style.css": ("style.css", "text/css; charset=utf-8")}
+                      "/style.css": ("style.css", "text/css; charset=utf-8"),
+                      "/js/progress_manager.js": ("js/progress_manager.js", "text/javascript; charset=utf-8"),
+                      "/css/progress.css": ("css/progress.css", "text/css; charset=utf-8")}
             if path in static:
                 name, kind = static[path]
                 self.headers_out(200, kind)
@@ -88,6 +96,8 @@ def make_server(app, port=0):
                     self.output(200, app.workbench.listing())
                 elif path == "/api/media":
                     self.output(200, {**app.media.catalog(), "jobs": app.media.list()})
+                elif path == "/api/tools":
+                    self.output(200, {"tools": sorted(app.engine.tools())})
                 elif path.startswith("/api/media/result/"):
                     result = app.media.result(path.rsplit("/", 1)[1])
                     self.headers_out(200, "image/png" if result.suffix == ".png" else "video/x-msvideo")
@@ -117,6 +127,11 @@ def make_server(app, port=0):
                 self.output(400, {"error": str(exc)})
                 return
             path = urlparse(self.path).path
+            if path == "/api/agent/confirm":
+                app.agent_confirmation_result = body.get("approved") is True
+                app.agent_confirmation.set()
+                self.output(200, {"ok": True})
+                return
             if path == "/api/media/start":
                 try:
                     self.output(202, app.media.start(body))
@@ -137,6 +152,12 @@ def make_server(app, port=0):
             try:
                 if path == "/api/project/upload":
                     self.output(201, app.workbench.upload(body.get("path"), body.get("content")))
+                elif path == "/api/tools/call":
+                    name = body.get("name")
+                    arguments = body.get("arguments", {})
+                    if not isinstance(arguments, dict):
+                        raise ValueError("Tool arguments must be an object")
+                    self.output(200, {"result": app.engine.call_tool(name, **arguments)})
                 elif path == "/api/project/read":
                     self.output(200, {"content": app.workbench.read(body.get("path"))})
                 elif path == "/api/project/change":
@@ -147,17 +168,24 @@ def make_server(app, port=0):
                     self.output(201, app.store.create())
                 elif path == "/api/engine/start":
                     context = body.get("context", 4096)
-                    layers = body.get("gpu_layers", 0)
+                    layers = body.get("gpu_layers")
                     if type(context) is not int or context not in (2048, 4096, 8192, 16384):
                         raise ValueError("Unsupported context size")
-                    if type(layers) is not int or not 0 <= layers <= 999:
+                    if layers is not None and (type(layers) is not int or not 0 <= layers <= 999):
                         raise ValueError("GPU layers must be between 0 and 999")
-                    self.output(200, app.engine.start(body.get("model"), context, layers))
+                    self.output(200, app.engine.start(
+                        body.get("model"), context, layers, body.get("sha256")
+                    ))
                 elif path == "/api/engine/stop":
                     app.engine.stop()
                     self.output(200, {"ok": True})
-                elif path == "/api/generate":
-                    self.generate(body)
+                elif path in ("/api/generate", "/api/chat"):
+                    if body.get("mode") == "agent":
+                        self.generate_agent(body)
+                    else:
+                        self.generate(body)
+                elif path == "/api/agent/stream":
+                    self.generate_agent(body, sse=True)
                 else:
                     self.output(404, {"error": "Not found"})
             except KeyError:
@@ -222,6 +250,8 @@ def make_server(app, port=0):
                 self.wfile.write(json.dumps(obj).encode() + b"\n")
                 self.wfile.flush()
 
+            event(progress_event("edit" if mode == "edit" else mode,
+                                 "Getting ready", 0))
             stream = app.engine.stream(messages, temperature, max_tokens=4096) if mode == "edit" else app.engine.stream(messages, temperature)
             try:
                 for token in stream:
@@ -230,6 +260,12 @@ def make_server(app, port=0):
                         break
                     answer.append(token)
                     event({"token": token})
+                    event(progress_event(
+                        "code" if mode in ("code", "edit") else "chat",
+                        "Generating function logic & types..." if mode in ("code", "edit")
+                        else "Thinking & structuring response...",
+                        min(95, 10 + len("".join(answer)) // 80),
+                    ))
             except (BrokenPipeError, ConnectionResetError):
                 state = "interrupted"
             except Exception as exc:
@@ -248,9 +284,91 @@ def make_server(app, port=0):
             except Exception:
                 error = "Could not save the response. Check the drive before closing this tab."
             try:
+                event(progress_event(
+                    "code" if mode in ("code", "edit") else "chat",
+                    "Code complete." if mode in ("code", "edit") else "Response ready.",
+                    100,
+                ))
                 event({"done": True, "status": state, "error": error})
             except (BrokenPipeError, ConnectionResetError):
                 pass
+
+        def generate_agent(self, body, sse=False):
+            prompt = body.get("prompt")
+            if not isinstance(prompt, str) or not prompt.strip():
+                raise ValueError("Enter a goal for the agent.")
+            chat = app.store.get(body.get("chat_id"))
+            app.store.add(chat["id"], "user", prompt.strip())
+            app.cancel.clear()
+            if sse:
+                self.headers_out(200, "text/event-stream; charset=utf-8")
+            else:
+                self.headers_out(200, "application/x-ndjson; charset=utf-8")
+
+            def event(obj):
+                payload = json.dumps(obj).encode()
+                if sse:
+                    self.wfile.write(b"event: " + obj.get("type", "message").encode() + b"\n")
+                    self.wfile.write(b"data: " + payload + b"\n\n")
+                else:
+                    self.wfile.write(payload + b"\n")
+                self.wfile.flush()
+
+            event(progress_event("agent", "Planning task steps...", 5))
+            auto_approve = body.get("auto_approve") is True
+
+            def confirm(tool, arguments):
+                if tool != "execute_command" or classify_command(arguments.get("command", "")) != "high":
+                    return
+                app.pending_confirmation = {"tool": tool, "arguments": arguments}
+                app.agent_confirmation.clear()
+                event({"type": "confirmation_required",
+                       "confirmation": app.pending_confirmation})
+                while not app.agent_confirmation.wait(0.25):
+                    if app.cancel.is_set():
+                        raise AgentStopped("Agent execution stopped.")
+                approved = app.agent_confirmation_result
+                app.pending_confirmation = None
+                if not approved:
+                    raise PermissionError("User declined the sensitive command.")
+                arguments["confirm"] = True
+
+            answer = []
+            state, error = "complete", None
+            agent = AutonomousAgent(app.engine, auto_approve=auto_approve)
+
+            def approval(tool, arguments):
+                confirm(tool, arguments)
+                return True
+            if not auto_approve:
+                agent.confirmation_callback = approval
+            try:
+                def agent_event(item):
+                    if item.get("type") == "action":
+                        stage = "Launching tool"
+                        percentage = min(90, 15 + item.get("iteration", 1) * 10)
+                    elif item.get("type") == "observation":
+                        stage = "Evaluating tool output and self-correcting..."
+                        percentage = min(95, 25 + item.get("iteration", 1) * 10)
+                    elif item.get("type") == "final":
+                        stage, percentage = "Goal accomplished.", 100
+                    else:
+                        stage, percentage = "Reasoning about next step...", 10
+                    event(progress_event("agent", stage, percentage,
+                                         item.get("tool", "")))
+                    event(item)
+
+                result = agent.run(prompt, stream_callback=agent_event)
+                answer.append(result["answer"])
+            except AgentStopped as exc:
+                state, error = "interrupted", str(exc)
+            except Exception as exc:
+                state, error = "error", str(exc)
+            finally:
+                app.pending_confirmation = None
+                app.agent_confirmation.set()
+            app.store.add(chat["id"], "assistant", "".join(answer), state)
+            event({"done": True, "status": state, "error": error})
 
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.daemon_threads = True

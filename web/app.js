@@ -5,6 +5,7 @@ if (token) sessionStorage.setItem("myai-token", token);
 history.replaceState(null, "", "/");
 let active = null, chats = [], busy = false, running = false;
 const welcome = $("messages").innerHTML;
+const progressManager = new ProgressManager($("progress"));
 
 function notice(message = "") { $("notice").textContent = message; $("notice").hidden = !message; }
 async function api(path, method = "GET", body) {
@@ -86,16 +87,30 @@ $("composer").onsubmit = async event => {
   try {
     if (!active) { const chat = await (await api("/api/chats", "POST", {})).json(); active = chat.id; $("messages").replaceChildren(); }
     message("user", prompt); responseText = message("assistant", ""); $("prompt").value = "";
+    progressManager.start(workspaceMode === "code" ? "code" : workspaceMode === "agent" ? "agent" : "chat");
     $("stop").hidden = false; $("stop").disabled = false; $("stop").textContent = "Stop response";
-    const response = await api("/api/generate", "POST", {chat_id: active, prompt, mode: workspaceMode === "code" && $("edit-project").checked ? "edit" : workspaceMode, files: [...selectedFiles]});
+    const agentMode = workspaceMode === "agent";
+    const response = await api(agentMode ? "/api/agent/stream" : "/api/generate", "POST", {chat_id: active, prompt, mode: workspaceMode === "code" && $("edit-project").checked ? "edit" : workspaceMode, files: [...selectedFiles], auto_approve: agentMode && $("auto-approve").checked});
     const reader = response.body.getReader(), decoder = new TextDecoder(); let pending = "";
     while (true) {
       const {done, value} = await reader.read();
       pending += decoder.decode(value || new Uint8Array(), {stream: !done});
-      const lines = pending.split("\n"); pending = lines.pop();
-      for (const line of lines) {
+      const records = agentMode ? pending.split("\n\n") : pending.split("\n");
+      pending = records.pop();
+      for (const record of records) {
+        const line = agentMode ? record.split("\n").find(line => line.startsWith("data: "))?.slice(6) : record;
         if (!line) continue; const item = JSON.parse(line);
+        if (item.type === "progress") progressManager.update(item);
         if (item.token) { responseText.textContent += item.token; scrollMessages(); }
+        if (item.type === "action" || item.type === "observation" || item.type === "error") {
+          addAgentEvent(item);
+          progressManager.addStep(item);
+        }
+        if (item.confirmation) {
+          const approved = confirm(`Allow sensitive command?\n${JSON.stringify(item.confirmation.arguments.command)}`);
+          await api("/api/agent/confirm", "POST", {approved});
+        }
+        if (item.type === "final" && item.content) { responseText.textContent += item.content; scrollMessages(); }
         if (item.proposal) showProposal(item.proposal);
         if (item.error) notice(item.error);
         if (item.done) complete = true;
@@ -105,7 +120,7 @@ $("composer").onsubmit = async event => {
     if (!complete) throw new Error("Connection ended before completion. Check the saved conversation before retrying.");
     await openChat(active);
   } catch(e) { notice(e.message); if (responseText && !responseText.textContent) responseText.textContent = "Response unavailable. Your message may already be saved; reopen this conversation before retrying."; }
-  finally { $("stop").hidden = true; setBusy(false); await listChats().catch(e => notice(e.message)); $("prompt").focus(); }
+  finally { progressManager.finish(); $("stop").hidden = true; setBusy(false); await listChats().catch(e => notice(e.message)); $("prompt").focus(); }
 };
 $("export").onclick = async () => {
   if (!active) return notice("Open a conversation to export it.");
@@ -133,6 +148,12 @@ async function refreshMedia() {
   if (state.presets.some(p => p.id === selected && p.kind === mediaKind)) $("media-preset").value = selected;
   $("studio-hint").textContent = "Generation unloads the chat model to free memory. " + (state.runtime_found ? "Missing models can be installed with scripts/setup_models.py; see docs/STUDIO.md." : "Diffusion runtime setup is required; see docs/STUDIO.md.");
   const current = state.jobs.find(j => j.status === "running");
+  if (current && current.progress) {
+    if (progressManager.mode !== "studio" || progressManager.root.hidden) progressManager.start("studio");
+    progressManager.update(current.progress);
+  } else if (!current && progressManager.root.classList.contains("progress-studio")) {
+    progressManager.finish();
+  }
   $("media-status").textContent = current ? "Generating locally… This may take several minutes. You can leave this tab open or return later." : "Ready for your next creation.";
   $("media-generate").disabled = Boolean(current);
   $("media-stop").disabled = !current;
@@ -150,7 +171,7 @@ async function refreshMedia() {
   clearTimeout(mediaPoll); if (current) mediaPoll = setTimeout(() => refreshMedia().catch(e => notice(e.message)), 2500);
 }
 $("media-generate").onclick = async () => {
-  $("media-generate").disabled = true; notice();
+  $("media-generate").disabled = true; notice(); progressManager.start("studio");
   try { await api("/api/media/start", "POST", {preset: $("media-preset").value, prompt: $("media-prompt").value, steps: Number($("media-steps").value), seed: Number($("media-seed").value), experimental: $("video-confirm").checked}); } catch(e) { notice(e.message); }
   await refreshMedia().catch(e => notice(e.message));
 };
@@ -163,6 +184,19 @@ function renderContent(target, value) {
     if (index % 2) { const pre = document.createElement("pre"), code = document.createElement("code"); code.textContent = part; pre.append(code); target.append(pre); }
     else { part.split(/\*\*([^*]+)\*\*/g).forEach((piece, i) => { if(i % 2) { const strong = document.createElement("strong"); strong.textContent = piece; target.append(strong); } else target.append(document.createTextNode(piece)); }); }
   });
+}
+
+function addAgentEvent(item) {
+  const block = document.createElement("details");
+  block.open = true;
+  const summary = document.createElement("summary");
+  summary.textContent = item.type === "action" ? `Action · ${item.tool}` :
+    item.type === "observation" ? `Observation · ${item.tool}` : "Agent protocol error";
+  const output = document.createElement("pre");
+  output.textContent = JSON.stringify(item, null, 2);
+  block.append(summary, output);
+  $("messages").append(block);
+  scrollMessages();
 }
 
 const selectedFiles = new Set();
