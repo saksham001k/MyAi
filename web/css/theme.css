@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  --bg: #080a0e;
+  --bg: #0b0f19;
   --surface: #0f1218;
   --surface-elevated: #151a22;
   --surface-overlay: rgba(21, 26, 34, .82);
@@ -12,8 +12,8 @@
   --line-strong: rgba(255, 255, 255, .16);
   --accent: #8b87ff;
   --accent-soft: rgba(139, 135, 255, .16);
-  --chat: #8b87ff;
-  --code: #38d9c2;
+  --chat: #4facfe;
+  --code: #00f2fe;
   --studio: #c48cff;
   --agent: #5ee89c;
   --warning: #ffb86b;

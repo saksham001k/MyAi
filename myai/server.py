@@ -83,6 +83,7 @@ def make_server(app, port=0):
             static = {"/": ("index.html", "text/html; charset=utf-8"),
                       "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                       "/style.css": ("style.css", "text/css; charset=utf-8"),
+                      "/logo.svg": ("logo.svg", "image/svg+xml"),
                       "/css/theme.css": ("css/theme.css", "text/css; charset=utf-8"),
                       "/css/nav.css": ("css/nav.css", "text/css; charset=utf-8"),
                       "/css/chat.css": ("css/chat.css", "text/css; charset=utf-8"),

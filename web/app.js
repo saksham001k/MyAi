@@ -129,7 +129,7 @@ $("composer").onsubmit = async event => {
 };
 $("export").onclick = async () => {
   if (!active) return notice("Open a conversation to export it.");
-  try { const chat = await (await api(`/api/chats/${active}`)).json(); const text = `# ${chat.title}\n\n` + chat.messages.map(m => `## ${m.role === "user" ? "You" : "MyAi"}${m.status !== "complete" ? ` (${m.status})` : ""}\n\n${m.content}`).join("\n\n"); const url = URL.createObjectURL(new Blob([text], {type: "text/markdown"})); const a = document.createElement("a"); a.href = url; a.download = `MyAi-${active.slice(0,8)}.md`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); } catch(e) { notice(e.message); }
+  try { const chat = await (await api(`/api/chats/${active}`)).json(); const text = `# ${chat.title}\n\n` + chat.messages.map(m => `## ${m.role === "user" ? "You" : "KISS"}${m.status !== "complete" ? ` (${m.status})` : ""}\n\n${m.content}`).join("\n\n"); const url = URL.createObjectURL(new Blob([text], {type: "text/markdown"})); const a = document.createElement("a"); a.href = url; a.download = `KISS-${active.slice(0,8)}.md`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); } catch(e) { notice(e.message); }
 };
 bindSuggestions();
 Promise.all([refresh(), listChats()]).catch(e => notice(e.message));
