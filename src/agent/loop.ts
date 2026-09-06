@@ -1,5 +1,6 @@
 import type { AgentTool } from "./tools.js";
 import { generateRepoMap } from "../indexer/repoMap.js";
+import type { ProjectMemory } from "./memory.js";
 
 export interface AgentModel {
   generate(prompt: string): Promise<string>;
@@ -17,6 +18,7 @@ export interface AgentLoopOptions {
   maxSteps?: number;
   maxToolCalls?: number;
   onEvent?: (event: AgentEvent) => void;
+  memory?: ProjectMemory;
 }
 
 export interface AgentResult {
@@ -51,6 +53,7 @@ function parseResponse(response: string): {
 export class AgentLoop {
   private readonly maxSteps: number;
   private readonly maxToolCalls: number;
+  private readonly memory?: ProjectMemory;
 
   public constructor(
     private readonly model: AgentModel,
@@ -60,6 +63,7 @@ export class AgentLoop {
     this.maxSteps = Math.max(1, Math.min(options.maxSteps ?? 10, 50));
     this.maxToolCalls = Math.max(1, Math.min(options.maxToolCalls ?? this.maxSteps, 100));
     this.onEvent = options.onEvent;
+    this.memory = options.memory;
   }
 
   private readonly onEvent?: (event: AgentEvent) => void;
@@ -72,7 +76,8 @@ export class AgentLoop {
     };
     const schemas = this.tools.map((tool) => tool.schema);
     const repoMap = await generateRepoMap(800);
-    let prompt = `You are a local autonomous developer. Goal: ${goal}\nRepository map:\n${repoMap}\nTools: ${JSON.stringify(schemas)}\nRespond with {"thought":"...","action":{"tool":"name","args":{...}}} or {"final":"..."}.`;
+    const memory = this.memory ? `${this.memory.promptContext(goal)}\n` : "";
+    let prompt = `You are a local autonomous developer. Goal: ${goal}\n${memory}Repository map:\n${repoMap}\nTools: ${JSON.stringify(schemas)}\nRespond with {"thought":"...","action":{"tool":"name","args":{...}}} or {"final":"..."}.`;
     let calls = 0;
     for (let step = 1; step <= this.maxSteps; step += 1) {
       let parsed: ReturnType<typeof parseResponse>;

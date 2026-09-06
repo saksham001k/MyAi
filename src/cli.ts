@@ -16,6 +16,8 @@ import { createAgentTools } from "./agent/tools.js";
 import { IsolatedWorktree } from "./guardrails/worktree.js";
 import { reviewWorktree, terminalReviewIO } from "./cli/reviewer.js";
 import { startMcpServer } from "./mcp/server.js";
+import { MyAiDatabase } from "./storage/db.js";
+import { ProjectMemory } from "./agent/memory.js";
 
 async function approve(filePath: string): Promise<boolean> {
   const staged = execFileSync("git", ["diff", "--cached", "--name-only", "--", filePath], { encoding: "utf8" }).trim();
@@ -48,6 +50,8 @@ program
   .argument("<goal>")
   .option("--max-steps <number>", "maximum agent steps", "10")
   .action(async (goal: string, options: { maxSteps: string }) => {
+    const database = new MyAiDatabase();
+    const memory = new ProjectMemory(database);
     const provider = new OllamaProvider();
     const model = {
       generate: async (prompt: string) => provider.generatePatch(prompt, {
@@ -65,6 +69,7 @@ program
       for (;;) {
         const loop = new AgentLoop(model, createAgentTools(workspace), {
           maxSteps: Number(options.maxSteps),
+          memory,
           onEvent: (event) => console.log(chalk.cyan(`[${event.type}] ${event.content}`))
         });
         const result = await loop.run(currentGoal);
@@ -79,6 +84,13 @@ program
           discard: async () => worktree.discard(),
           retry: async (feedback) => { currentGoal = `${goal}\nReviewer feedback: ${feedback}`; }
         });
+        const diffSummary = (await worktree.diff()).split("\n").slice(0, 40).join("\n");
+        database.recordTask({
+          goal: currentGoal,
+          status: decision === "accepted" ? "accepted" : decision === "discarded" ? "discarded" : "retry",
+          diffSummary,
+          iterations: result.steps
+        });
         if (decision === "accepted" || decision === "discarded") {
           created = false;
           break;
@@ -86,6 +98,50 @@ program
       }
     } finally {
       if (created) await worktree.discard();
+      database.close();
+    }
+  });
+
+const rule = program.command("rule").description("Manage persistent project rules");
+rule.command("add")
+  .argument("<rule>")
+  .description("Add a developer rule")
+  .action((value: string) => {
+    const database = new MyAiDatabase();
+    try {
+      const item = database.addRule(value);
+      console.log(chalk.green(`Added rule #${item.id}: ${item.rule}`));
+    } finally {
+      database.close();
+    }
+  });
+rule.command("list")
+  .description("List active developer rules")
+  .action(() => {
+    const database = new MyAiDatabase();
+    try {
+      const rules = database.listRules();
+      if (!rules.length) console.log("No project rules configured.");
+      rules.forEach((item) => console.log(`${item.id}. ${item.rule}`));
+    } finally {
+      database.close();
+    }
+  });
+
+program
+  .command("history")
+  .description("Display previous agent runs")
+  .action(() => {
+    const database = new MyAiDatabase();
+    try {
+      const history = database.listHistory();
+      if (!history.length) console.log("No agent history recorded.");
+      history.forEach((item) => {
+        console.log(`${item.timestamp} [${item.status}] ${item.goal} (${item.iterations} iterations)`);
+        if (item.diffSummary) console.log(chalk.gray(item.diffSummary));
+      });
+    } finally {
+      database.close();
     }
   });
 
@@ -112,6 +168,7 @@ program
   .argument("<testCommand>")
   .option("--max-attempts <number>", "maximum repair attempts", "3")
   .action(async (testCommand: string, options: { maxAttempts: string }) => {
+    const database = new MyAiDatabase();
     const provider = new OllamaProvider();
     const engine = new SelfHealingEngine(
       new ProcessSandbox(),
@@ -124,6 +181,13 @@ program
       }
     );
     const result = await engine.diagnoseAndRepair(testCommand, undefined, Number(options.maxAttempts));
+    database.recordTask({
+      goal: `fix ${testCommand}`,
+      status: result.success ? "succeeded" : "failed",
+      diffSummary: result.logs.slice(-1)[0] ?? "",
+      iterations: result.logs.length
+    });
+    database.close();
     result.logs.forEach((log, index) => console.log(chalk.gray(`Attempt ${index + 1}:\n${log}`)));
     console.log(result.success ? chalk.green("Repair succeeded.") : chalk.red("Repair failed."));
   });
