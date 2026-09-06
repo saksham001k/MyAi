@@ -12,7 +12,7 @@ MAX_CONTEXT = 12000
 
 class Workbench:
     def __init__(self, root):
-        self.root = root / 'data' / 'workbench'
+        self.root = (root / 'data' / 'workbench').resolve()
         self.files = self.root / 'files'
         self.records = self.root / 'changes'
         self.files.mkdir(parents=True, exist_ok=True)
