@@ -86,4 +86,22 @@ export class ProcessSandbox {
       failure: parseFailureLocation(stderr)
     };
   }
+
+  public start(
+    command: string | readonly string[],
+    options: SandboxOptions = {}
+  ): { stop: () => void } {
+    assertCommandAllowed(command, options);
+    const timeoutMs = options.timeoutMs ?? 30_000;
+    const child = typeof command !== "string"
+      ? execa(command[0], command.slice(1), {
+          cwd: options.cwd, env: options.env, shell: false, reject: false,
+          timeout: timeoutMs, killSignal: "SIGTERM", stdio: "ignore"
+        })
+      : execa(command, {
+          cwd: options.cwd, env: options.env, shell: false, reject: false,
+          timeout: timeoutMs, killSignal: "SIGTERM", stdio: "ignore"
+        });
+    return { stop: () => child.kill("SIGTERM") };
+  }
 }

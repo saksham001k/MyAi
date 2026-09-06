@@ -18,6 +18,9 @@ import { reviewWorktree, terminalReviewIO } from "./cli/reviewer.js";
 import { startMcpServer } from "./mcp/server.js";
 import { MyAiDatabase } from "./storage/db.js";
 import { ProjectMemory } from "./agent/memory.js";
+import { searchWeb, fetchDocumentation } from "./tools/webSearch.js";
+import { BrowserSession } from "./tools/browser.js";
+import { FrontendHealer } from "./engine/browserHealer.js";
 
 async function approve(filePath: string): Promise<boolean> {
   const staged = execFileSync("git", ["diff", "--cached", "--name-only", "--", filePath], { encoding: "utf8" }).trim();
@@ -207,6 +210,46 @@ program
       return;
     }
     health.models.forEach((model) => console.log(`- ${model}`));
+  });
+
+program.command("browse")
+  .argument("<url>")
+  .description("Audit a URL with the local headless browser")
+  .action(async (url: string) => {
+    const browser = new BrowserSession();
+    try {
+      await browser.navigate(url);
+      console.log(JSON.stringify({
+        consoleErrors: browser.getConsoleErrors(),
+        accessibility: await browser.getAccessibilitySnapshot()
+      }, null, 2));
+    } finally {
+      await browser.close();
+    }
+  });
+
+program.command("search")
+  .argument("<query>")
+  .description("Search public documentation without an API key")
+  .option("--docs", "fetch and print the first result documentation")
+  .action(async (query: string, options: { docs?: boolean }) => {
+    const results = await searchWeb(query);
+    if (options.docs && results[0]) {
+      console.log(await fetchDocumentation(results[0].url));
+      return;
+    }
+    results.forEach((result, index) => console.log(`${index + 1}. ${result.title}\n${result.url}\n${result.snippet}\n`));
+  });
+
+program.command("e2e")
+  .argument("<testGoal>")
+  .option("--command <command>", "development server command", "npm run dev")
+  .option("--port <number>", "development server port", "3000")
+  .action(async (testGoal: string, options: { command: string; port: string }) => {
+    const healer = new FrontendHealer(new OllamaProvider(), { port: Number(options.port) });
+    const result = await healer.run(options.command, testGoal);
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.success) process.exitCode = 1;
   });
 
 await program.parseAsync();

@@ -3,6 +3,8 @@ import path from "node:path";
 import { extractSymbolAtLocation } from "../indexer/slicer.js";
 import { patchFileRange } from "../tools/filePatcher.js";
 import { ProcessSandbox, type ProcessResult } from "../engine/sandbox.js";
+import { searchWeb, fetchDocumentation } from "../tools/webSearch.js";
+import { BrowserSession } from "../tools/browser.js";
 
 export interface ToolSchema {
   name: string;
@@ -70,6 +72,64 @@ export function createAgentTools(workspaceRoot: string, sandbox = new ProcessSan
     return resolved;
   };
   return [
+    {
+      schema: {
+        name: "search_web",
+        description: "Search the public web without API keys using DuckDuckGo HTML.",
+        parameters: { query: { type: "string", required: true }, maxResults: { type: "number" } }
+      },
+      async execute(args) {
+        return searchWeb(stringArg(args, "query"), args.maxResults === undefined ? 5 : numberArg(args, "maxResults"));
+      }
+    },
+    {
+      schema: {
+        name: "fetch_docs",
+        description: "Fetch and clean public package or official documentation.",
+        parameters: { url: { type: "string", required: true } }
+      },
+      async execute(args) {
+        return { url: stringArg(args, "url"), content: await fetchDocumentation(stringArg(args, "url")) };
+      }
+    },
+    {
+      schema: {
+        name: "browse_url",
+        description: "Open a URL in a local headless browser and inspect console errors and accessibility.",
+        parameters: { url: { type: "string", required: true } }
+      },
+      async execute(args) {
+        const browser = new BrowserSession();
+        try {
+          await browser.navigate(stringArg(args, "url"));
+          return { consoleErrors: browser.getConsoleErrors(), accessibility: await browser.getAccessibilitySnapshot() };
+        } finally {
+          await browser.close();
+        }
+      }
+    },
+    {
+      schema: {
+        name: "click_element",
+        description: "Open a URL and click or fill one visible element.",
+        parameters: {
+          url: { type: "string", required: true }, selector: { type: "string", required: true },
+          action: { type: "string", required: true }, value: { type: "string" }
+        }
+      },
+      async execute(args) {
+        const browser = new BrowserSession();
+        try {
+          await browser.navigate(stringArg(args, "url"));
+          const action = stringArg(args, "action");
+          if (action !== "click" && action !== "fill") throw new Error("action must be click or fill");
+          await browser.interact(stringArg(args, "selector"), action, args.value as string | undefined);
+          return { consoleErrors: browser.getConsoleErrors(), accessibility: await browser.getAccessibilitySnapshot() };
+        } finally {
+          await browser.close();
+        }
+      }
+    },
     {
       schema: {
         name: "read_symbol",

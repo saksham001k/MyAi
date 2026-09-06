@@ -27,6 +27,24 @@ export function createMcpServer(workspaceRoot = process.cwd()): McpServer {
       server.tool("run_command", tool.schema.description, { command: z.string() }, async ({ command }) => ({
         content: [{ type: "text", text: JSON.stringify(await tool.execute({ command })) }]
       }));
+    } else if (tool.schema.name === "search_web") {
+      server.tool("search_web", tool.schema.description, { query: z.string(), maxResults: z.number().int().optional() }, async ({ query, maxResults }) => ({
+        content: [{ type: "text", text: JSON.stringify(await tool.execute({ query, maxResults })) }]
+      }));
+    } else if (tool.schema.name === "fetch_docs") {
+      server.tool("fetch_docs", tool.schema.description, { url: z.string() }, async ({ url }) => ({
+        content: [{ type: "text", text: JSON.stringify(await tool.execute({ url })) }]
+      }));
+    } else if (tool.schema.name === "browse_url") {
+      server.tool("browse_url", tool.schema.description, { url: z.string() }, async ({ url }) => ({
+        content: [{ type: "text", text: JSON.stringify(await tool.execute({ url })) }]
+      }));
+    } else if (tool.schema.name === "click_element") {
+      server.tool("click_element", tool.schema.description, {
+        url: z.string(), selector: z.string(), action: z.enum(["click", "fill"]), value: z.string().optional()
+      }, async (args) => ({
+        content: [{ type: "text", text: JSON.stringify(await tool.execute(args)) }]
+      }));
     }
   }
   return server;
