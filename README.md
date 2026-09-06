@@ -16,6 +16,13 @@ MyAi is a local-first AI chat application by Saksham Katiyar. It runs a compatib
 - Relative workspace layout, transactional saves, checksum-verified model import helper.
 - Source launchers for Mac, Windows and Linux; native app packaging workflow.
 
+## Automatic setup on Apple Silicon Mac
+
+From the source checkout, run `python3 scripts/setup_mac.py` with Python 3.10+.
+The script downloads an official checksummed macOS ARM64 runtime and Qwen3-4B Q4_K_M (about 2.5 GB), verifies the model SHA-256, preserves the runtime library layout, and launches MyAi. Interrupted downloads can resume. Existing mismatched files are not overwritten. Internet is needed for this setup only. Select the model, 4096 context and GPU, then Load model in the interface.
+
+Setup helper tests pass with download fixtures; an actual Apple Silicon download and inference run is still required. If setup stops, share the terminal error. It installs no system packages and does not change OS security settings.
+
 ## First run on Mac or Linux
 
 ```bash
@@ -26,7 +33,7 @@ python3 run.py
 
 The interface opens even before a model is installed and explains which files are missing. **Source mode needs Python 3.10+.** On Windows, use `python run.py` or `Start-MyAi.bat`.
 
-For actual AI answers, follow [SETUP](docs/SETUP.md) to add a compatible llama.cpp runtime and GGUF model. No downloads happen automatically. Once prepared, chat does not require internet access.
+For actual AI answers, follow [SETUP](docs/SETUP.md) to add a compatible llama.cpp runtime and GGUF model. The normal app does not download files; the optional Mac setup helper does. Once prepared, chat does not require internet access.
 
 ## Workspace layout
 
@@ -58,7 +65,7 @@ Keep the entire extracted directory, including `_internal`, together. See [pendr
 
 ## Scope and next steps
 
-The first target is reliable portable chat. Document RAG, repository indexing, voice, Android, automatic model recommendations, resumable downloads, encrypted storage, and authenticated LAN sharing are **not implemented**. See [ROADMAP](docs/ROADMAP.md) for acceptance gates.
+The first target is reliable portable chat. Document RAG, repository indexing, voice, Android, automatic model recommendations, a cross-platform download manager, encrypted storage, and authenticated LAN sharing are **not implemented**. See [ROADMAP](docs/ROADMAP.md) for acceptance gates.
 
 MyAi stores data locally, but does not make the host computer trustworthy or prevent operating-system/browser caches. Storage is not encrypted. Stop MyAi before ejecting or copying its workspace.
 
