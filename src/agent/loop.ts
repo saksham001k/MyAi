@@ -1,4 +1,5 @@
 import type { AgentTool } from "./tools.js";
+import { generateRepoMap } from "../indexer/repoMap.js";
 
 export interface AgentModel {
   generate(prompt: string): Promise<string>;
@@ -70,7 +71,8 @@ export class AgentLoop {
       this.onEvent?.(event);
     };
     const schemas = this.tools.map((tool) => tool.schema);
-    let prompt = `You are a local autonomous developer. Goal: ${goal}\nTools: ${JSON.stringify(schemas)}\nRespond with {"thought":"...","action":{"tool":"name","args":{...}}} or {"final":"..."}.`;
+    const repoMap = await generateRepoMap(800);
+    let prompt = `You are a local autonomous developer. Goal: ${goal}\nRepository map:\n${repoMap}\nTools: ${JSON.stringify(schemas)}\nRespond with {"thought":"...","action":{"tool":"name","args":{...}}} or {"final":"..."}.`;
     let calls = 0;
     for (let step = 1; step <= this.maxSteps; step += 1) {
       let parsed: ReturnType<typeof parseResponse>;

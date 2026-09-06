@@ -38,4 +38,25 @@ export class IsolatedWorktree {
     const result = await this.sandbox.run(["git", "diff", "HEAD"], { cwd: this.path });
     return result.stdout;
   }
+
+  public async acceptAndMerge(): Promise<void> {
+    const staged = await this.sandbox.run(["git", "add", "-A"], { cwd: this.path });
+    if (staged.exitCode !== 0) throw new Error(staged.stderr || "Unable to stage worktree changes.");
+    const snapshot = await this.sandbox.run(
+      ["git", "commit", "-m", "MyAi autonomous worktree snapshot"],
+      { cwd: this.path }
+    );
+    if (snapshot.exitCode !== 0) throw new Error(snapshot.stderr || "Unable to snapshot worktree changes.");
+    const result = await this.sandbox.run(
+      ["git", "merge", "--squash", this.branch],
+      { cwd: this.repositoryRoot }
+    );
+    if (result.exitCode !== 0) throw new Error(result.stderr || "Unable to squash-merge worktree branch.");
+    const commit = await this.sandbox.run(
+      ["git", "commit", "-m", "Apply MyAi autonomous changes"],
+      { cwd: this.repositoryRoot }
+    );
+    if (commit.exitCode !== 0) throw new Error(commit.stderr || "Unable to commit squashed changes.");
+    await this.discard();
+  }
 }

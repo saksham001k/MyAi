@@ -14,6 +14,8 @@ import { checkOllama } from "./providers/health.js";
 import { AgentLoop } from "./agent/loop.js";
 import { createAgentTools } from "./agent/tools.js";
 import { IsolatedWorktree } from "./guardrails/worktree.js";
+import { reviewWorktree, terminalReviewIO } from "./cli/reviewer.js";
+import { startMcpServer } from "./mcp/server.js";
 
 async function approve(filePath: string): Promise<boolean> {
   const staged = execFileSync("git", ["diff", "--cached", "--name-only", "--", filePath], { encoding: "utf8" }).trim();
@@ -55,31 +57,42 @@ program
     };
     const worktree = new IsolatedWorktree(process.cwd(), `task-${Date.now()}`);
     let created = false;
+    const io = terminalReviewIO();
     try {
       const workspace = await worktree.create();
       created = true;
-      const loop = new AgentLoop(model, createAgentTools(workspace), {
-        maxSteps: Number(options.maxSteps),
-        onEvent: (event) => console.log(chalk.cyan(`[${event.type}] ${event.content}`))
-      });
-      const result = await loop.run(goal);
-      const diff = await worktree.diff();
-      if (result.success) {
-        console.log(chalk.green(result.answer));
-        console.log(chalk.cyan(diff || "No file changes were produced."));
-        console.log(chalk.yellow(
-          `Review and squash-merge branch ${worktree.branch} into main when ready. Worktree: ${workspace}`
-        ));
-        created = false;
-      } else {
-        console.log(chalk.red(result.answer));
-        await worktree.discard();
-        created = false;
+      let currentGoal = goal;
+      for (;;) {
+        const loop = new AgentLoop(model, createAgentTools(workspace), {
+          maxSteps: Number(options.maxSteps),
+          onEvent: (event) => console.log(chalk.cyan(`[${event.type}] ${event.content}`))
+        });
+        const result = await loop.run(currentGoal);
+        if (!result.success) {
+          console.log(chalk.red(result.answer));
+          await worktree.discard();
+          created = false;
+          break;
+        }
+        const decision = await reviewWorktree(worktree, io, {
+          accept: async () => worktree.acceptAndMerge(),
+          discard: async () => worktree.discard(),
+          retry: async (feedback) => { currentGoal = `${goal}\nReviewer feedback: ${feedback}`; }
+        });
+        if (decision === "accepted" || decision === "discarded") {
+          created = false;
+          break;
+        }
       }
     } finally {
       if (created) await worktree.discard();
     }
   });
+
+program
+  .command("serve")
+  .description("Run the MyAi tool suite as an MCP stdio server")
+  .action(async () => startMcpServer(process.cwd()));
 
 program
   .command("inspect")
