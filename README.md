@@ -4,18 +4,7 @@
 
 MyAi is a local-first AI chat application by Saksham Katiyar. It runs a compatible GGUF model through a dedicated llama.cpp server and keeps conversations beside the app, ready to move with the workspace.
 
-**Status: v0.2.0 source implementation. Basic Qwen3 chat has run on the user's M4. Additional coding models, image/video generation and physical pendrive acceptance remain unverified.** This repository contains working application code, tests, launchers, and packaging workflows—not pretrained model weights or runtime binaries. It does not claim to outperform PortableLM yet.
-
-## New in 0.2 — Code, Images and Video
-
-- Code workspace with coding instructions and readable fenced code blocks.
-- Optional Qwen2.5-Coder 1.5B and 3B model download packs.
-- Stable Diffusion 1.5 and SDXL image-generation adapters.
-- Experimental Wan2.1 1.3B short-video adapter with explicit opt-in.
-- Persistent media jobs, cancellation, authenticated output downloads, and automatic chat-model unloading before diffusion.
-- Model downloads verified against publisher hashes and pinned revisions.
-
-These are implemented integrations, not bundled model weights or hardware performance guarantees. Media requires a separate compatible diffusion runtime. Automatic runtime installation depends on an available checksummed upstream macOS ARM64 archive; missing runtime builds remain an explicit setup limitation. Physical testing is deferred at the user's request. See [Studio setup and limits](docs/STUDIO.md).
+**Status: v0.1.0 source implementation. Real-model and physical pendrive acceptance testing are still required.** This repository contains working application code, tests, launchers, and packaging workflows—not pretrained model weights or runtime binaries. It does not claim to outperform PortableLM yet.
 
 ## What works in this version
 
@@ -27,13 +16,6 @@ These are implemented integrations, not bundled model weights or hardware perfor
 - Relative workspace layout, transactional saves, checksum-verified model import helper.
 - Source launchers for Mac, Windows and Linux; native app packaging workflow.
 
-## Automatic setup on Apple Silicon Mac
-
-From the source checkout, run `python3 scripts/setup_mac.py` with Python 3.10+.
-The script downloads an official checksummed macOS ARM64 runtime and Qwen3-4B Q4_K_M (about 2.5 GB), verifies the model SHA-256, preserves the runtime library layout, and launches MyAi. Interrupted downloads can resume. Existing mismatched files are not overwritten. Internet is needed for this setup only. Select the model, 4096 context and GPU, then Load model in the interface.
-
-Setup helper tests pass with download fixtures; an actual Apple Silicon download and inference run is still required. If setup stops, share the terminal error. It installs no system packages and does not change OS security settings.
-
 ## First run on Mac or Linux
 
 ```bash
@@ -44,7 +26,7 @@ python3 run.py
 
 The interface opens even before a model is installed and explains which files are missing. **Source mode needs Python 3.10+.** On Windows, use `python run.py` or `Start-MyAi.bat`.
 
-For actual AI answers, follow [SETUP](docs/SETUP.md) to add a compatible llama.cpp runtime and GGUF model. The normal app does not download files; the optional Mac setup helper does. Once prepared, chat does not require internet access.
+For actual AI answers, follow [SETUP](docs/SETUP.md) to add a compatible llama.cpp runtime and GGUF model. No downloads happen automatically. Once prepared, chat does not require internet access.
 
 ## Workspace layout
 
@@ -76,7 +58,7 @@ Keep the entire extracted directory, including `_internal`, together. See [pendr
 
 ## Scope and next steps
 
-The first target is reliable portable chat. Document RAG, repository indexing, voice, Android, automatic model recommendations, a cross-platform download manager, encrypted storage, and authenticated LAN sharing are **not implemented**. See [ROADMAP](docs/ROADMAP.md) for acceptance gates.
+The first target is reliable portable chat. Document RAG, repository indexing, voice, Android, automatic model recommendations, resumable downloads, encrypted storage, and authenticated LAN sharing are **not implemented**. See [ROADMAP](docs/ROADMAP.md) for acceptance gates.
 
 MyAi stores data locally, but does not make the host computer trustworthy or prevent operating-system/browser caches. Storage is not encrypted. Stop MyAi before ejecting or copying its workspace.
 
@@ -85,3 +67,7 @@ MyAi stores data locally, but does not make the host computer trustworthy or pre
 Inspired by the portable-workspace concept in [PortableLM](https://github.com/orailnoor/PortableLM). MyAi's application code is an original implementation. Inference is provided by [llama.cpp](https://github.com/ggml-org/llama.cpp); its binaries and models have their own licenses and compatibility requirements. No PortableLM source or model weights are included.
 
 MyAi application code is MIT licensed. See [LICENSE](LICENSE).
+
+## Upload and edit project files
+
+MyAi now accepts UTF-8 text/code uploads and folder uploads, includes selected files in local chat context, and offers reviewed coding changes with Apply, Undo, and individual file downloads. Open **Project files · Upload and edit**. See [Workbench guide](docs/WORKBENCH.md) for limits and usage. This edits uploaded copies; it does not run terminal commands.

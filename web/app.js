@@ -87,7 +87,7 @@ $("composer").onsubmit = async event => {
     if (!active) { const chat = await (await api("/api/chats", "POST", {})).json(); active = chat.id; $("messages").replaceChildren(); }
     message("user", prompt); responseText = message("assistant", ""); $("prompt").value = "";
     $("stop").hidden = false; $("stop").disabled = false; $("stop").textContent = "Stop response";
-    const response = await api("/api/generate", "POST", {chat_id: active, prompt, mode: workspaceMode});
+    const response = await api("/api/generate", "POST", {chat_id: active, prompt, mode: workspaceMode === "code" && $("edit-project").checked ? "edit" : workspaceMode, files: [...selectedFiles]});
     const reader = response.body.getReader(), decoder = new TextDecoder(); let pending = "";
     while (true) {
       const {done, value} = await reader.read();
@@ -96,6 +96,7 @@ $("composer").onsubmit = async event => {
       for (const line of lines) {
         if (!line) continue; const item = JSON.parse(line);
         if (item.token) { responseText.textContent += item.token; scrollMessages(); }
+        if (item.proposal) showProposal(item.proposal);
         if (item.error) notice(item.error);
         if (item.done) complete = true;
       }
@@ -163,3 +164,58 @@ function renderContent(target, value) {
     else { part.split(/\*\*([^*]+)\*\*/g).forEach((piece, i) => { if(i % 2) { const strong = document.createElement("strong"); strong.textContent = piece; target.append(strong); } else target.append(document.createTextNode(piece)); }); }
   });
 }
+
+const selectedFiles = new Set();
+let currentProposal = null;
+async function refreshProject() {
+  const files = await (await api('/api/project')).json();
+  $('project-files').replaceChildren();
+  for (const f of files) {
+    const row = document.createElement('div'); row.className = 'project-row';
+    const label = document.createElement('label'), check = document.createElement('input');
+    check.type = 'checkbox'; check.checked = selectedFiles.has(f.path);
+    check.onchange = () => check.checked ? selectedFiles.add(f.path) : selectedFiles.delete(f.path);
+    label.append(check, document.createTextNode(f.path));
+    const download = document.createElement('button'); download.textContent = 'Download';
+    download.onclick = async () => { try {
+      const result = await (await api('/api/project/read', 'POST', {path:f.path})).json();
+      const url = URL.createObjectURL(new Blob([result.content], {type:'text/plain;charset=utf-8'}));
+      const a = document.createElement('a'); a.href=url; a.download=f.path.split('/').pop(); a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    } catch(e) {notice(e.message);} };
+    row.append(label,download); $('project-files').append(row);
+  }
+}
+async function uploadFiles(files) {
+  if(busy) return;
+  setBusy(true);
+  try {
+    for(const file of files) {
+      if(file.size > 60000) throw new Error(`${file.name}: maximum size is 60 KB.`);
+      const content = new TextDecoder('utf-8', {fatal:true}).decode(await file.arrayBuffer());
+      const path = file.webkitRelativePath || file.name;
+      await api('/api/project/upload','POST',{path,content});
+      selectedFiles.add(path);
+    }
+    notice('Files uploaded. Select files to include in your next message.');
+  } catch(e) {notice(e.message);}
+  finally {setBusy(false); await refreshProject().catch(e=>notice(e.message));}
+}
+$('upload-files').onchange = event => uploadFiles([...event.target.files]);
+$('upload-folder').onchange = event => uploadFiles([...event.target.files]);
+function showProposal(p) {
+  currentProposal=p; $('change-review').hidden=false;
+  $('change-id').value=p.id;
+  $('change-status').textContent=`${p.status} · ${p.files.length} file(s)`;
+  $('change-diff').textContent=p.files.map(f=>f.diff).join('\n');
+  $('apply-change').disabled=p.status!=='pending';
+  $('undo-change').disabled=p.status!=='applied';
+}
+for(const action of ['apply','undo']) $(action+'-change').onclick=async()=>{
+  if(busy || !currentProposal) return;
+  setBusy(true);
+  try {showProposal(await (await api('/api/project/'+action,'POST',{id:currentProposal.id})).json()); await refreshProject();}
+  catch(e){notice(e.message);}finally{setBusy(false);}
+};
+$('open-change').onclick=async()=>{try{showProposal(await (await api('/api/project/change','POST',{id:$('change-id').value.trim()})).json());}catch(e){notice(e.message);}};
+refreshProject().catch(e=>notice(e.message));

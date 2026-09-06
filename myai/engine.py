@@ -85,11 +85,11 @@ class Engine:
             data=json.dumps(data).encode() if data is not None else None,
             headers={"Authorization": f"Bearer {self.key}", "Content-Type": "application/json"})
 
-    def stream(self, messages, temperature):
+    def stream(self, messages, temperature, max_tokens=1024):
         if not self.status()["running"]:
             raise ValueError("Load a model before sending a message.")
         payload = {"messages": messages, "stream": True, "temperature": temperature,
-                   "max_tokens": 1024}
+                   "max_tokens": max_tokens}
         try:
             with self.http.open(self.request("/v1/chat/completions", payload), timeout=180) as response:
                 for raw in response:

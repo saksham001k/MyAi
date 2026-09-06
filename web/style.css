@@ -3,3 +3,10 @@
 .workspace-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}#studio{overflow:auto;padding:12px 0}#studio>label{display:block;margin:16px 0}#studio textarea{border:1px solid var(--line);border-radius:9px;padding:12px;background:white}#studio input[type=number]{width:110px;padding:9px;border:1px solid var(--line);border-radius:8px}#studio p{color:var(--muted);font-size:13px}.creation{padding:16px;border:1px solid var(--line);border-radius:12px;margin:12px 0}.creation small{display:block;margin-bottom:10px}.creation img{display:block;max-width:100%;max-height:512px;margin:12px 0}.creation a{display:block;margin-top:8px;color:var(--green)}
 
 .content pre{white-space:pre;overflow:auto;padding:15px;background:#eaf0e7;border-radius:10px}.content code{font:12px/1.6 ui-monospace,monospace}
+#project-panel {margin: 12px 0; padding: 16px; border: 1px solid #d8e0d4; border-radius: 12px; max-height: 45vh; overflow: auto;}
+#project-panel summary {cursor: pointer; font-weight: 700;}
+#project-panel p {font-size: 13px; margin: 12px 0;}
+.project-row {display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 6px 0;}
+.project-row label {overflow-wrap: anywhere;}
+#project-panel input[type=checkbox] {width: auto; margin-right: 8px;}
+#change-diff {white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; background: #eef2ea; padding: 12px;}
