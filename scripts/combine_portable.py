@@ -24,6 +24,7 @@ def main():
             (target / source.name).chmod(0o755)
     shutil.copytree(ROOT / "docs", target / "docs")
     shutil.copy2(ROOT / "LICENSE", target / "LICENSE")
+    shutil.copytree(ROOT / "third_party", target / "third_party")
     (target / "Workspace/models").mkdir(parents=True)
     (target / "Workspace/data").mkdir(parents=True)
     (target / "README.txt").write_text("MyAi portable bundle. Models are not included. Use prepare_pendrive.py to copy your downloaded models and conversations. See docs/PENDRIVE.md.\n")

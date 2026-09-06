@@ -19,7 +19,7 @@ class PortableTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "runtime.json").write_text(json.dumps({"llama-server": "vendor/bin/llama-server"}))
-            self.assertEqual(executable(root, "llama-server"), root / "vendor/bin/llama-server")
+            self.assertEqual(executable(root, "llama-server"), (root / "vendor/bin/llama-server").resolve())
             (root / "runtime.json").write_text(json.dumps({"llama-server": "../outside"}))
             with self.assertRaises(ValueError):
                 executable(root, "llama-server")

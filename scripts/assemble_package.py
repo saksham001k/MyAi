@@ -11,3 +11,4 @@ for name in ("data", "models", "runtime"):
 for name in ("README.md", "LICENSE", "Start-MyAi.command", "Start-MyAi.bat", "start.sh"):
     shutil.copy2(root / name, destination / name)
 shutil.copytree(root / "docs", destination / "docs", dirs_exist_ok=True)
+shutil.copytree(root / "third_party", destination / "third_party", dirs_exist_ok=True)
