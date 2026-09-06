@@ -18,6 +18,7 @@ from .tools.system_control import classify_command
 from .progress import progress_event
 from .uploader import Uploader, MAX_UPLOAD_BYTES
 from .indexer import WorkspaceIndexer
+from .healer import SelfHealingAgent
 
 
 class App:
@@ -206,6 +207,16 @@ def make_server(app, port=0):
                 self.output(409, {"error": "An operation is already in progress. Stop it or wait."})
                 return
             try:
+                if path == "/api/agent/run":
+                    command = body.get("command")
+                    if not isinstance(command, (str, list, tuple)) or not command:
+                        raise ValueError("A test or build command is required.")
+                    healer = SelfHealingAgent(
+                        engine=app.engine, workspace_root=app.root, apply_changes=False,
+                    )
+                    result = healer.repair(command)
+                    self.output(200, result)
+                    return
                 if path == "/api/project/upload":
                     self.output(201, app.workbench.upload(body.get("path"), body.get("content")))
                 elif path == "/api/tools/call":

@@ -4,10 +4,29 @@ import unittest
 from pathlib import Path
 
 from myai.repair import SelfHealingLoop, parse_failure, symbol_at
-from myai.sandbox import ExecutionRequest, SandboxPolicyError, SandboxRunner
+from myai.sandbox import (
+    ExecutionRequest, ExecutionSandbox, SandboxPolicyError, SandboxRunner,
+    parse_traceback,
+)
 
 
 class SandboxTests(unittest.TestCase):
+    def test_execution_sandbox_captures_output_and_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = ExecutionSandbox(directory).run(
+                [sys.executable, "-c", "print('x'); raise RuntimeError('bad')"]
+            )
+        self.assertNotEqual(result["exit_code"], 0)
+        self.assertEqual(result["stdout"].strip(), "x")
+        self.assertEqual(parse_traceback("fixture.py:8:2: bad")[0]["line"], 8)
+
+    def test_execution_sandbox_kills_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = ExecutionSandbox(directory, timeout=0.05).run(
+                [sys.executable, "-c", "import time; time.sleep(1)"]
+            )
+        self.assertTrue(result["timed_out"])
+
     def test_runs_child_process_and_captures_output(self):
         with tempfile.TemporaryDirectory() as directory:
             result = SandboxRunner(Path(directory)).run(

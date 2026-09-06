@@ -5,6 +5,8 @@ import os
 import re
 import shlex
 import subprocess
+import signal
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -111,3 +113,67 @@ class SandboxRunner:
             return ExecutionResult(tuple(args), None, stdout, stderr, timed_out=True)
         except OSError as exc:
             return ExecutionResult(tuple(args), None, "", str(exc), traceback=str(exc))
+
+
+def parse_traceback(stderr: str) -> list[dict]:
+    """Extract common Python and JS/TS failure locations from process output."""
+    pattern = re.compile(
+        r'(?:(?:File\s+["\']([^"\']+)["\'],\s+line\s+(\d+))|'
+        r'((?:[A-Za-z]:[\\/]|/|\.{0,2}[\\/])?[^()\s"\']+\.(?:py|js|jsx|ts|tsx)):(\d+)(?::(\d+))?)'
+    )
+    lines = stderr.splitlines()
+    results = []
+    for index, line in enumerate(lines):
+        match = pattern.search(line)
+        if not match:
+            continue
+        file_path = match.group(1) or match.group(3)
+        line_number = int(match.group(2) or match.group(4))
+        results.append({
+            "file": file_path,
+            "line": line_number,
+            "column": int(match.group(5)) if match.group(5) else None,
+            "message": line.strip(),
+            "context": "\n".join(lines[index:index + 3]),
+        })
+    return results
+
+
+class ExecutionSandbox:
+    """Run local build/test commands with hard timeouts and captured output."""
+
+    def __init__(self, workspace_root, timeout=15):
+        self.workspace_root = Path(workspace_root).resolve()
+        self.timeout = timeout
+        if timeout <= 0:
+            raise ValueError("timeout must be positive")
+
+    def run(self, command, timeout=None, cwd=None, env=None):
+        args = _arguments(command)
+        working = (Path(cwd) if cwd else self.workspace_root).resolve()
+        if not working.is_relative_to(self.workspace_root):
+            raise ValueError("Working directory must be inside the project workspace.")
+        ensure_policy(ExecutionRequest(args, working, timeout or self.timeout), args)
+        started = time.monotonic()
+        process = subprocess.Popen(
+            args, cwd=working, env={**{"PATH": os.environ.get("PATH", "")}, **(env or {})},
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, shell=False,
+        )
+        try:
+            stdout, stderr = process.communicate(timeout=timeout or self.timeout)
+        except subprocess.TimeoutExpired as exc:
+            process.kill()
+            stdout, stderr = process.communicate()
+            stdout = stdout or (exc.stdout or "")
+            stderr = (stderr or (exc.stderr or "")) + "\nCommand timed out."
+            return {
+                "command": tuple(args), "exit_code": None, "stdout": stdout,
+                "stderr": stderr, "timed_out": True,
+                "duration": time.monotonic() - started, "traceback": parse_traceback(stderr),
+            }
+        return {
+            "command": tuple(args), "exit_code": process.returncode, "stdout": stdout,
+            "stderr": stderr, "timed_out": False,
+            "duration": time.monotonic() - started, "traceback": parse_traceback(stderr),
+        }
