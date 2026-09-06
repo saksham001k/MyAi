@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { OpenAICompatibleProvider, repairPrompt } from "../src/providers/llm.js";
+import { OllamaProvider, stripPatchFences } from "../src/providers/ollama.js";
 
 const context = {
   filePath: "src/math.ts",
@@ -28,5 +29,24 @@ describe("LLM providers", () => {
     expect(body.temperature).toBe(0.1);
     expect(body.messages[0].content).toContain("Enclosing symbol:");
     expect(repairPrompt("Fix", context, "trace")).toContain("ONLY the complete replacement block");
+  });
+
+  it("uses Ollama without credentials and strips markdown fences", async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ models: [{ name: "qwen2.5-coder:1.5b" }] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        response: "```typescript\nfunction add() { return 42; }\n```"
+      })));
+    const provider = new OllamaProvider({ fetchImpl });
+    const result = await provider.generatePatch("Repair it.", context, "missing");
+    expect(result).toBe("function add() { return 42; }");
+    expect(fetchImpl.mock.calls[1][0]).toBe("http://localhost:11434/api/generate");
+    const body = JSON.parse(fetchImpl.mock.calls[1][1]?.body as string) as {
+      model: string;
+      options: { temperature: number; num_predict: number };
+    };
+    expect(body.model).toBe("qwen2.5-coder:1.5b");
+    expect(body.options).toEqual({ temperature: 0.1, num_predict: 512 });
+    expect(stripPatchFences("Explanation\nfunction add() {}")).toBe("function add() {}");
   });
 });

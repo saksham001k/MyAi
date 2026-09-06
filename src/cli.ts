@@ -9,7 +9,8 @@ import { stdin as input, stdout as output } from "node:process";
 import { ProcessSandbox } from "./engine/sandbox.js";
 import { SelfHealingEngine } from "./engine/healer.js";
 import { extractSymbolAtLocation } from "./indexer/slicer.js";
-import { createProviderFromEnvironment } from "./providers/llm.js";
+import { OllamaProvider } from "./providers/ollama.js";
+import { checkOllama } from "./providers/health.js";
 
 async function approve(filePath: string): Promise<boolean> {
   const staged = execFileSync("git", ["diff", "--cached", "--name-only", "--", filePath], { encoding: "utf8" }).trim();
@@ -55,7 +56,7 @@ program
   .argument("<testCommand>")
   .option("--max-attempts <number>", "maximum repair attempts", "3")
   .action(async (testCommand: string, options: { maxAttempts: string }) => {
-    const provider = createProviderFromEnvironment();
+    const provider = new OllamaProvider();
     const engine = new SelfHealingEngine(
       new ProcessSandbox(),
       process.cwd(),
@@ -69,6 +70,23 @@ program
     const result = await engine.diagnoseAndRepair(testCommand, undefined, Number(options.maxAttempts));
     result.logs.forEach((log, index) => console.log(chalk.gray(`Attempt ${index + 1}:\n${log}`)));
     console.log(result.success ? chalk.green("Repair succeeded.") : chalk.red("Repair failed."));
+  });
+
+program
+  .command("check")
+  .description("Check the local Ollama service and list installed models")
+  .action(async () => {
+    const health = await checkOllama();
+    if (!health.available) {
+      console.log(chalk.yellow(health.notice));
+      return;
+    }
+    console.log(chalk.green("Ollama detected at http://localhost:11434"));
+    if (health.models.length === 0) {
+      console.log(chalk.yellow("No local models installed."));
+      return;
+    }
+    health.models.forEach((model) => console.log(`- ${model}`));
   });
 
 await program.parseAsync();

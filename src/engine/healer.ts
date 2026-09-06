@@ -3,6 +3,7 @@ import type { ProcessResult, ProcessSandbox } from "./sandbox.js";
 import { extractSymbolAtLocation, type SymbolContext } from "../indexer/slicer.js";
 import { patchFileRange } from "../tools/filePatcher.js";
 import type { LLMProvider } from "../providers/llm.js";
+import { OllamaProvider } from "../providers/ollama.js";
 
 export interface TracebackLocation {
   filePath: string;
@@ -96,7 +97,11 @@ export class SelfHealingEngine {
           )
         : patchGenerator
           ? await patchGenerator(output, context)
-          : (() => { throw new Error("A patch generator or LLM provider is required."); })();
+          : await new OllamaProvider().generatePatch(
+              "Repair the failing TypeScript symbol with the smallest correct change.",
+              context,
+              output
+            );
       if (this.approvePatch && !(await this.approvePatch(context, replacement))) break;
       if (!(await patchFileRange(
         context.filePath,
