@@ -5,20 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0a0c10">
   <title>KISS — Offline AI Workspace</title>
-  <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/layout.css">
   <link rel="stylesheet" href="/css/nav.css">
   <link rel="stylesheet" href="/css/chat.css">
   <link rel="stylesheet" href="/css/studio.css">
   <link rel="stylesheet" href="/css/progress.css">
+  <script src="/js/toast.js" defer></script>
+  <script src="/js/file_ingestion.js" defer></script>
   <script src="/js/progress_manager.js" defer></script>
   <script src="/js/nav.js" defer></script>
   <script src="/js/chat.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <aside class="sidebar" aria-label="Workspace navigation">
     <a class="brand" href="/" aria-label="KISS home"><img src="/logo.svg" alt="KISS" width="140" height="32"><span class="version">LOCAL</span></a>
+    <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-expanded="true">‹</button>
     <button id="new-chat" class="new" type="button"><span aria-hidden="true">＋</span> New conversation</button>
     <label class="search-label" for="search">Conversations</label>
     <input id="search" type="search" placeholder="Search titles…" autocomplete="off">
@@ -26,7 +30,7 @@
     <div class="sidebar-bottom"><span class="dot"></span><div><strong>Private by design</strong><small>Conversations stay in this workspace.</small></div></div>
   </aside>
 
-  <main>
+  <main id="main-content">
     <header class="topbar">
       <div class="topbar-title"><span class="eyebrow">YOUR PRIVATE WORKSPACE</span><h1 id="chat-title">A little space for big ideas.</h1></div>
       <div class="topbar-actions">
@@ -50,7 +54,7 @@
       <div class="engine-actions">
         <label class="model-compact">Model<select id="model"><option value="">No models yet</option></select></label>
         <label class="auto-toggle"><input id="auto-approve" type="checkbox"><span class="toggle-track" aria-hidden="true"></span><span>Auto-approve</span></label>
-        <button id="settings-toggle" class="subtle" type="button" aria-expanded="false" aria-controls="settings">Settings</button>
+        <button id="settings-toggle" class="subtle" type="button" aria-expanded="false" aria-controls="settings" aria-label="Open settings">⚙ Settings</button>
       </div>
     </section>
 
@@ -64,7 +68,7 @@
       <p id="setup-hint" class="hint">Checking local files…</p>
     </section>
 
-    <section id="studio" hidden>
+    <section id="studio" data-mode-view="studio" hidden>
       <div class="studio-heading"><div><span class="eyebrow">GENERATIVE STUDIO</span><h2>Make something new.</h2><p id="studio-hint"></p></div><span class="studio-chip">LOCAL DIFFUSION</span></div>
       <div class="studio-mode-switch" role="tablist" aria-label="Studio workflow"><button id="text-to-image" class="studio-mode active" type="button" role="tab" aria-selected="true">Text-to-Image</button><button id="image-to-image" class="studio-mode" type="button" role="tab" aria-selected="false">Image-to-Image / Edit</button></div>
       <section id="img2img-panel" class="img2img-panel" hidden>
@@ -94,13 +98,19 @@
 
     <div id="notice" class="notice" role="alert" hidden></div>
     <section id="progress" class="progress" hidden aria-live="polite"></section>
+    <section id="file-ingestion" class="file-ingestion" aria-label="Uploaded files" hidden>
+      <div id="file-chips" class="file-chips"></div>
+    </section>
     <section id="messages" aria-label="Messages" aria-live="polite"><div class="welcome"><div class="spark">✦</div><p class="eyebrow">PRIVATE, LOCAL, YOURS</p><h2>What’s on your mind?</h2><p>Ask a question, shape an idea, or give the agent a goal.<br>Everything stays in this workspace.</p><div class="suggestions"><button data-prompt="Explain a difficult concept using a simple example." type="button"><span>UNDERSTAND</span>Make something complex feel simple <b>↗</b></button><button data-prompt="Help me break my project into a practical step-by-step plan." type="button"><span>CREATE</span>Turn an idea into a clear plan <b>↗</b></button><button data-prompt="Help me debug my code. Ask me for the code and the error first." type="button"><span>BUILD</span>Work through a coding problem <b>↗</b></button></div></div></section>
-    <footer><form id="composer"><label class="sr-only" for="prompt">Message MyAi</label><textarea id="prompt" rows="2" maxlength="16000" placeholder="Ask anything. Keep it yours." required></textarea><div class="composer-bottom"><span id="composer-hint">Load a model to begin · Shift+Enter for a new line</span><button type="button" id="stop" class="subtle" hidden>Stop</button><button id="send" class="primary" type="submit" disabled>Send <span aria-hidden="true">↗</span></button></div></form><p class="footnote">Local AI can make mistakes. Check important answers.</p></footer>
+    <button id="scroll-bottom" class="scroll-bottom" type="button" hidden>↓ Newest message</button>
+    <footer><form id="composer"><label class="sr-only" for="prompt">Message MyAi</label><textarea id="prompt" name="prompt" rows="2" maxlength="16000" placeholder="Ask anything. Keep it yours." required></textarea><div class="composer-bottom"><span id="composer-hint">Load a model to begin · Shift+Enter for a new line</span><button type="button" id="stop" class="subtle" hidden>Stop</button><button id="send" class="primary" type="submit" disabled>Send <span aria-hidden="true">↗</span></button></div></form><p class="footnote">Local AI can make mistakes. Check important answers.</p></footer>
   </main>
 
   <section id="command-palette" class="palette" hidden role="dialog" aria-modal="true" aria-labelledby="palette-title">
     <div class="palette-backdrop" data-palette-close></div>
     <div class="palette-panel"><div class="palette-head"><div><span class="eyebrow">QUICK ACTIONS</span><h2 id="palette-title">Command palette</h2></div><button type="button" class="subtle" data-palette-close>Esc</button></div><input id="palette-search" type="search" placeholder="Search commands…" autocomplete="off"><div id="palette-list" role="listbox"></div></div>
   </section>
+  <div id="global-drop-overlay" class="global-drop-overlay" hidden><div class="global-drop-card"><strong>Drop to upload</strong><span id="drop-context">Images for Studio</span></div></div>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>

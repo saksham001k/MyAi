@@ -15,12 +15,14 @@
 .message.user { border: 1px solid rgba(56, 217, 194, .15); background: rgba(56, 217, 194, .06); }
 .message.assistant { padding: 15px 18px; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(255, 255, 255, .02); }
 .message .content { color: #dce3eb; }
+.message .content p, .message .content li, .message .content strong { color: var(--text-primary); }
+.message .content a { color: #7dd3fc; }
 .content pre, #change-diff { position: relative; padding: 18px 18px 18px 44px; border: 1px solid var(--line); background: #0b0e13; color: #d9e5ef; }
 .content pre::before { content: "CODE"; position: absolute; top: 7px; right: 10px; color: var(--faint); font-size: 9px; letter-spacing: .12em; }
 .content code { color: #d9e5ef; }
 .message details, #messages > details { max-width: 900px; margin: 8px auto; padding: 10px 13px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255, 255, 255, .025); }
 #messages > details summary { cursor: pointer; color: var(--agent); font-size: 12px; }
-#messages > details pre { white-space: pre-wrap; max-height: 240px; overflow: auto; color: var(--muted); }
+#messages > details pre { white-space: pre-wrap; max-height: 240px; overflow: auto; color: var(--text-secondary); background: #0f172a; }
 #composer { border-color: var(--line-strong); background: var(--surface-overlay); box-shadow: 0 12px 40px rgba(0, 0, 0, .2); backdrop-filter: blur(16px); }
 #composer textarea { color: var(--text); }
 .copy { color: var(--muted); }

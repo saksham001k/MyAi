@@ -5,9 +5,12 @@
   --surface-elevated: #151a22;
   --surface-overlay: rgba(21, 26, 34, .82);
   --surface-soft: #1b222d;
-  --text: #edf2f7;
-  --muted: #8e9aaa;
-  --faint: #5d6877;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text: var(--text-primary);
+  --muted: var(--text-secondary);
+  --faint: var(--text-muted);
   --line: rgba(255, 255, 255, .09);
   --line-strong: rgba(255, 255, 255, .16);
   --accent: #8b87ff;
@@ -34,13 +37,21 @@ body {
   letter-spacing: .01em;
 }
 button, input, select, textarea { color: inherit; }
+input, textarea, select {
+  color: var(--text-primary);
+  background-color: #1e293b;
+  border: 1px solid var(--line);
+}
+input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 1; }
+select option { color: var(--text-primary); background: #1e293b; }
+input:disabled, textarea:disabled, select:disabled { color: var(--text-muted); background: #172033; }
 button, select, input, textarea, details, .message, .creation, .settings, #project-panel {
   transition: border-color .22s var(--ease), background .22s var(--ease), box-shadow .22s var(--ease), transform .22s var(--ease);
 }
 button { border-color: var(--line); border-radius: var(--radius-sm); background: var(--surface-elevated); }
 button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-soft); transform: translateY(-1px); }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible {
-  outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 0 24px var(--accent-soft);
+  outline: 2px solid #38bdf8; outline-offset: 2px; border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.2), 0 0 24px rgba(56,189,248,.18);
 }
 [hidden] { display: none !important; }
 ::selection { background: rgba(139, 135, 255, .32); }

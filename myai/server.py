@@ -85,12 +85,15 @@ def make_server(app, port=0):
                       "/style.css": ("style.css", "text/css; charset=utf-8"),
                       "/logo.svg": ("logo.svg", "image/svg+xml"),
                       "/css/theme.css": ("css/theme.css", "text/css; charset=utf-8"),
+                      "/css/layout.css": ("css/layout.css", "text/css; charset=utf-8"),
                       "/css/nav.css": ("css/nav.css", "text/css; charset=utf-8"),
                       "/css/chat.css": ("css/chat.css", "text/css; charset=utf-8"),
                       "/css/studio.css": ("css/studio.css", "text/css; charset=utf-8"),
                       "/js/progress_manager.js": ("js/progress_manager.js", "text/javascript; charset=utf-8"),
                       "/js/nav.js": ("js/nav.js", "text/javascript; charset=utf-8"),
                       "/js/chat.js": ("js/chat.js", "text/javascript; charset=utf-8"),
+                      "/js/toast.js": ("js/toast.js", "text/javascript; charset=utf-8"),
+                      "/js/file_ingestion.js": ("js/file_ingestion.js", "text/javascript; charset=utf-8"),
                       "/css/progress.css": ("css/progress.css", "text/css; charset=utf-8")}
             if path in static:
                 name, kind = static[path]

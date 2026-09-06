@@ -7,7 +7,11 @@ let active = null, chats = [], busy = false, running = false;
 const welcome = $("messages").innerHTML;
 const progressManager = new ProgressManager($("progress"));
 
-function notice(message = "") { $("notice").textContent = message; $("notice").hidden = !message; }
+function notice(message = "") {
+  $("notice").textContent = message;
+  $("notice").hidden = !message;
+  if (message) window.showToast?.(message, "error");
+}
 async function api(path, method = "GET", body) {
   const response = await fetch(path, {method, headers: {"Authorization": `Bearer ${token || ""}`, "Content-Type": "application/json"}, body: body === undefined ? undefined : JSON.stringify(body)});
   if (!response.ok) { const result = await response.json(); throw new Error(result.error || "Request failed"); }
@@ -49,7 +53,7 @@ function renderHistory() {
     button.onclick = () => { if (!busy) openChat(chat.id).catch(e => notice(e.message)); };
     const remove = document.createElement("button"); remove.textContent = "×"; remove.className = "delete"; remove.setAttribute("aria-label", `Delete ${chat.title}`);
     remove.onclick = async () => {
-      if (busy || !confirm("Delete this conversation? This cannot be undone.")) return;
+      if (busy || !(await (window.confirmToast?.("Delete this conversation? This cannot be undone.") ?? Promise.resolve(false)))) return;
       try { await api(`/api/chats/${chat.id}`, "DELETE"); if (active === chat.id) newChat(); await listChats(); } catch(e) { notice(e.message); }
     };
     row.append(button, remove); $("history").append(row);
@@ -76,6 +80,16 @@ function scrollMessages() { $("messages").scrollTop = $("messages").scrollHeight
 function bindSuggestions() { document.querySelectorAll("[data-prompt]").forEach(button => button.onclick = () => { $("prompt").value = button.dataset.prompt; $("prompt").focus(); }); }
 $("search").oninput = renderHistory;
 $("new-chat").onclick = newChat;
+$("sidebar-toggle").onclick = () => {
+  const collapsed = document.body.classList.toggle("sidebar-collapsed");
+  $("sidebar-toggle").setAttribute("aria-expanded", String(!collapsed));
+  $("sidebar-toggle").setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+};
+$("messages").addEventListener("scroll", () => {
+  const distance = $("messages").scrollHeight - $("messages").scrollTop - $("messages").clientHeight;
+  $("scroll-bottom").hidden = distance < 120;
+});
+$("scroll-bottom").onclick = () => { scrollMessages(); $("scroll-bottom").hidden = true; };
 $("settings-toggle").onclick = () => { $("settings").hidden = !$("settings").hidden; $("settings-toggle").setAttribute("aria-expanded", String(!$("settings").hidden)); };
 $("load").onclick = async () => {
   notice(); setBusy(true); $("engine-status").textContent = "Loading model… larger models may take a few minutes.";
@@ -112,7 +126,7 @@ $("composer").onsubmit = async event => {
           progressManager.addStep(item);
         }
         if (item.confirmation) {
-          const approved = confirm(`Allow sensitive command?\n${JSON.stringify(item.confirmation.arguments.command)}`);
+          const approved = await (window.confirmToast?.(`Allow sensitive command?\n${JSON.stringify(item.confirmation.arguments.command)}`) ?? Promise.resolve(false));
           await api("/api/agent/confirm", "POST", {approved});
         }
         if (item.type === "final" && item.content) { responseText.textContent += item.content; scrollMessages(); }
@@ -143,7 +157,7 @@ document.querySelectorAll("[data-workspace]").forEach(button => button.onclick =
   const mode = button.dataset.workspace; const studio = mode === "image" || mode === "video";
   document.querySelectorAll("[data-workspace]").forEach(b => b.classList.toggle("primary", b === button));
   document.body.dataset.mode = mode === "image" || mode === "video" ? "studio" : mode;
-  $("studio").hidden = !studio; $("messages").hidden = studio; document.querySelector("footer").hidden = studio;
+  $("studio").hidden = !studio; $("messages").hidden = studio; $("project-panel").hidden = studio; document.querySelector("footer").hidden = studio;
   document.querySelector(".engine-bar").hidden = studio; $("settings").hidden = studio;
   if (studio) { mediaKind = mode; $("video-opt-in").hidden = mode !== "video"; await refreshMedia().catch(e => notice(e.message)); }
   else { workspaceMode = mode; $("prompt").placeholder = mode === "code" ? "Paste code, describe a bug, or ask for an implementation…" : "Ask anything. Keep it yours."; await refresh().catch(e => notice(e.message)); }
@@ -175,6 +189,7 @@ function showSourceImage(file) {
   };
   reader.readAsDataURL(file);
 }
+window.showSourceImage = showSourceImage;
 function clearSourceImage() {
   sourceImageData = "";
   $("image-file").value = "";
@@ -182,14 +197,11 @@ function clearSourceImage() {
   $("image-clear").hidden = true;
   $("image-preview").innerHTML = "<span>Drop a PNG, JPG, JPEG, or WebP here</span><small>Up to 20 MB · click to browse</small>";
 }
+window.clearSourceImage = clearSourceImage;
 $("text-to-image").onclick = () => setStudioWorkflow("text");
 $("image-to-image").onclick = () => setStudioWorkflow("img2img");
-$("image-file").onchange = event => showSourceImage(event.target.files[0]);
 $("image-clear").onclick = clearSourceImage;
 $("image-dropzone").onclick = event => { if (event.target !== $("image-clear")) $("image-file").click(); };
-["dragenter", "dragover"].forEach(type => $("image-dropzone").addEventListener(type, event => { event.preventDefault(); $("image-dropzone").classList.add("dragover"); }));
-["dragleave", "drop"].forEach(type => $("image-dropzone").addEventListener(type, event => { event.preventDefault(); $("image-dropzone").classList.remove("dragover"); }));
-$("image-dropzone").addEventListener("drop", event => showSourceImage(event.dataTransfer.files[0]));
 $("image-strength").oninput = event => {
   const value = Number(event.target.value);
   const label = value < 0.5 ? "Subtle tweak / touch-up" : value < 0.85 ? "Balanced transformation (Recommended)" : "Major creative overhaul";
