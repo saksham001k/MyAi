@@ -33,7 +33,8 @@ class ProgressManager {
     if (!event || event.type !== "progress") return;
     this.mode = event.mode || this.mode;
     this.root.className = `progress progress-${this.mode}`;
-    this.fill.style.width = `${event.percentage}%`;
+    this.fill.style.transform = `scaleX(${event.percentage / 100})`;
+    this.fill.dataset.percentage = event.percentage;
     this.label.textContent = `${event.percentage}% - ${event.stage}`;
     if (event.details) this.label.title = event.details;
   }
@@ -51,7 +52,7 @@ class ProgressManager {
   }
 
   finish() {
-    if (this.fill) this.fill.style.width = "100%";
+    if (this.fill) this.fill.style.transform = "scaleX(1)";
     this.root.classList.add("progress-finished");
     setTimeout(() => { this.root.hidden = true; }, 450);
   }

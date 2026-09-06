@@ -1,26 +1,100 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>MyAi · Your private workspace</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/css/progress.css"><script src="/js/progress_manager.js" defer></script><script src="/app.js" defer></script></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0c10">
+  <title>MyAi · Private local intelligence</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/nav.css">
+  <link rel="stylesheet" href="/css/chat.css">
+  <link rel="stylesheet" href="/css/studio.css">
+  <link rel="stylesheet" href="/css/progress.css">
+  <script src="/js/progress_manager.js" defer></script>
+  <script src="/js/nav.js" defer></script>
+  <script src="/js/chat.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
 <body>
-<aside class="sidebar"><a class="brand" href="/" aria-label="MyAi home"><span class="mark">M</span>MyAi<span class="version">LOCAL</span></a>
-<button id="new-chat" class="new">＋ New conversation</button>
-<label class="search-label" for="search">Conversations</label><input id="search" type="search" placeholder="Search titles…" autocomplete="off">
-<nav id="history" aria-label="Conversation history"></nav>
-<div class="sidebar-bottom"><span class="dot"></span><div>Yours. Wherever you go.<small>Conversations stay in this workspace.</small></div></div></aside>
-<main><header><div><span class="eyebrow">YOUR PRIVATE WORKSPACE</span><h1 id="chat-title">A little space for big ideas.</h1></div><button id="export" class="subtle">Export chat ↓</button></header>
-<div class="workspace-tabs" aria-label="Workspace"><button data-workspace="chat" class="primary">Chat</button><button data-workspace="agent">Agent</button><button data-workspace="code">Code</button><button data-workspace="image">Images</button><button data-workspace="video">Video · experimental</button></div>
-<section id="studio" hidden><h2>Create something new.</h2><p id="studio-hint"></p><label>Model <select id="media-preset"></select></label><label>Prompt<textarea id="media-prompt" rows="3" maxlength="4000" placeholder="Describe what you want to create…"></textarea></label><div class="controls"><label>Steps<input id="media-steps" type="number" min="1" max="40" value="20"></label><label>Seed<input id="media-seed" type="number" min="0" max="2147483647" value="42"></label><button id="media-generate" class="primary">Generate</button><button id="media-stop">Cancel generation</button></div><label id="video-opt-in" hidden><input id="video-confirm" type="checkbox"> Enable experimental video: 256 × 256, 17 frames; speed and memory use unverified.</label><p id="media-status" role="status"></p><div id="creations"></div></section>
-<section class="engine-bar" aria-label="Model controls"><span id="engine-status" role="status">Checking workspace…</span><button id="settings-toggle" class="subtle" aria-expanded="true" aria-controls="settings">Model settings</button></section>
-<section id="settings" class="settings"><div class="settings-heading"><h2>Make yourself at home.</h2><p>Choose a local model. Your computer does the thinking.</p></div><div class="controls"><label>Model<select id="model"><option value="">No models yet</option></select></label><label>Context<select id="context"><option>2048</option><option selected>4096</option><option>8192</option><option>16384</option></select></label><label>Acceleration<select id="gpu"><option value="0">CPU · compatible</option><option value="999">GPU · if supported</option></select></label><label class="toggle"><input id="auto-approve" type="checkbox"> Auto-Approve Actions</label><button id="load" class="primary">Load model</button><button id="unload" class="subtle">Unload</button></div><p id="setup-hint" class="hint">Checking local files…</p></section>
-<details id="project-panel"><summary>Project files · Upload and edit</summary>
-<p>Upload UTF-8 code or text files (60 KB each). Select up to 12 files, totaling 12,000 characters, as context. Originals stay unchanged; edits apply to copies in MyAi.</p>
-<div class="controls"><label>Upload files<input id="upload-files" type="file" multiple></label><label>Upload folder<input id="upload-folder" type="file" webkitdirectory multiple></label></div>
-<div id="project-files"></div>
-<label><input id="edit-project" type="checkbox"> In Code mode, propose file changes for review</label>
-<p>Use a coding model. Review changes, apply them, then download the edited files. MyAi does not execute commands.</p>
-<div class="controls"><input id="change-id" aria-label="Saved change ID" placeholder="Paste a saved change ID"><button id="open-change">Open saved change</button></div>
-<section id="change-review" hidden><p id="change-status" role="status"></p><pre id="change-diff"></pre><button id="apply-change" class="primary">Apply changes</button><button id="undo-change">Undo changes</button></section>
-</details>
-<div id="notice" class="notice" role="alert" hidden></div><section id="progress" class="progress" hidden aria-live="polite"></section>
-<section id="messages" aria-label="Messages" aria-live="polite"><div class="welcome"><div class="spark">✳</div><h2>What’s on your mind?</h2><p>A fresh idea, a tricky question, or something worth figuring out.<br>Your next conversation starts here.</p><div class="suggestions"><button data-prompt="Explain a difficult concept using a simple example."><span>UNDERSTAND</span>Make something complex feel simple ↗</button><button data-prompt="Help me break my project into a practical step-by-step plan."><span>CREATE</span>Turn an idea into a clear plan ↗</button><button data-prompt="Help me debug my code. Ask me for the code and the error first."><span>BUILD</span>Work through a coding problem ↗</button></div></div></section>
-<footer><form id="composer"><label class="sr-only" for="prompt">Message MyAi</label><textarea id="prompt" rows="2" maxlength="16000" placeholder="Ask anything. Keep it yours." required></textarea><div class="composer-bottom"><span id="composer-hint">Load a model to begin · Shift+Enter for a new line</span><button type="button" id="stop" class="subtle" hidden>Stop response</button><button id="send" class="primary" type="submit" disabled>Send ↑</button></div></form><p class="footnote">Local AI can make mistakes. Check important answers.</p></footer>
-</main></body></html>
+  <aside class="sidebar" aria-label="Workspace navigation">
+    <a class="brand" href="/" aria-label="MyAi home"><span class="mark">M</span><span>MyAi</span><span class="version">LOCAL</span></a>
+    <button id="new-chat" class="new" type="button"><span aria-hidden="true">＋</span> New conversation</button>
+    <label class="search-label" for="search">Conversations</label>
+    <input id="search" type="search" placeholder="Search titles…" autocomplete="off">
+    <nav id="history" aria-label="Conversation history"></nav>
+    <div class="sidebar-bottom"><span class="dot"></span><div><strong>Private by design</strong><small>Conversations stay in this workspace.</small></div></div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div class="topbar-title"><span class="eyebrow">YOUR PRIVATE WORKSPACE</span><h1 id="chat-title">A little space for big ideas.</h1></div>
+      <div class="topbar-actions">
+        <span id="hardware-badge" class="status-badge" title="Detected local acceleration">◌ Detecting hardware</span>
+        <button id="palette-open" class="icon-button" type="button" aria-label="Open command palette" title="Command palette (⌘K)">⌘K</button>
+        <button id="export" class="subtle" type="button">Export ↓</button>
+      </div>
+    </header>
+
+    <nav class="mode-nav" aria-label="Modes">
+      <span class="mode-indicator" aria-hidden="true"></span>
+      <button data-workspace="chat" class="mode-tab primary" type="button"><span>Chat</span><kbd>1</kbd></button>
+      <button data-workspace="code" class="mode-tab" type="button"><span>Code</span><kbd>2</kbd></button>
+      <button data-workspace="image" class="mode-tab" type="button"><span>Studio</span><kbd>3</kbd></button>
+      <button data-workspace="docs" class="mode-tab" type="button"><span>Docs</span><kbd>4</kbd></button>
+      <button data-workspace="agent" class="mode-tab" type="button"><span>Autonomous agent</span><kbd>5</kbd></button>
+    </nav>
+
+    <section class="engine-bar" aria-label="Model status">
+      <span id="engine-status" role="status"><span class="status-dot"></span> Checking workspace…</span>
+      <div class="engine-actions">
+        <label class="model-compact">Model<select id="model"><option value="">No models yet</option></select></label>
+        <label class="auto-toggle"><input id="auto-approve" type="checkbox"><span class="toggle-track" aria-hidden="true"></span><span>Auto-approve</span></label>
+        <button id="settings-toggle" class="subtle" type="button" aria-expanded="false" aria-controls="settings">Settings</button>
+      </div>
+    </section>
+
+    <section id="settings" class="settings" hidden>
+      <div class="settings-heading"><div><h2>Model controls</h2><p>Keep inference local. Tune the runtime for this machine.</p></div><span class="settings-kicker">LOCAL RUNTIME</span></div>
+      <div class="controls">
+        <label>Context<select id="context"><option>2048</option><option selected>4096</option><option>8192</option><option>16384</option></select></label>
+        <label>Acceleration<select id="gpu"><option value="0">CPU · compatible</option><option value="999">GPU · if supported</option></select></label>
+        <button id="load" class="primary" type="button">Load model</button><button id="unload" class="subtle" type="button">Unload</button>
+      </div>
+      <p id="setup-hint" class="hint">Checking local files…</p>
+    </section>
+
+    <section id="studio" hidden>
+      <div class="studio-heading"><div><span class="eyebrow">GENERATIVE STUDIO</span><h2>Make something new.</h2><p id="studio-hint"></p></div><span class="studio-chip">LOCAL DIFFUSION</span></div>
+      <div class="studio-canvas" aria-label="Generation preview"><div class="studio-canvas-glow"></div><span class="studio-canvas-mark">✦</span></div>
+      <p id="media-status" class="studio-stage" role="status">Ready for your next creation.</p>
+      <div class="studio-form">
+        <label>Model <select id="media-preset"></select></label>
+        <label>Prompt<textarea id="media-prompt" rows="3" maxlength="4000" placeholder="Describe the scene, subject, or atmosphere…"></textarea></label>
+        <div class="controls"><label>Steps<input id="media-steps" type="number" min="1" max="40" value="20"></label><label>Seed<input id="media-seed" type="number" min="0" max="2147483647" value="42"></label><button id="media-generate" class="primary" type="button">Generate</button><button id="media-stop" type="button">Cancel</button></div>
+        <label id="video-opt-in" hidden><input id="video-confirm" type="checkbox"> Enable experimental video</label>
+      </div>
+      <div id="creations"></div>
+    </section>
+
+    <details id="project-panel"><summary><span>Project files</span><small>Upload context and review edits</small></summary>
+      <p>Upload UTF-8 code or text files (60 KB each). Select up to 12 files as context. Originals stay unchanged.</p>
+      <div class="controls"><label>Upload files<input id="upload-files" type="file" multiple></label><label>Upload folder<input id="upload-folder" type="file" webkitdirectory multiple></label></div>
+      <div id="project-files"></div><label><input id="edit-project" type="checkbox"> In Code mode, propose file changes for review</label>
+      <p>Use a coding model. Review changes, apply them, then download edited files.</p>
+      <div class="controls"><input id="change-id" aria-label="Saved change ID" placeholder="Paste a saved change ID"><button id="open-change" type="button">Open saved change</button></div>
+      <section id="change-review" hidden><p id="change-status" role="status"></p><pre id="change-diff"></pre><button id="apply-change" class="primary" type="button">Apply changes</button><button id="undo-change" type="button">Undo changes</button></section>
+    </details>
+
+    <div id="notice" class="notice" role="alert" hidden></div>
+    <section id="progress" class="progress" hidden aria-live="polite"></section>
+    <section id="messages" aria-label="Messages" aria-live="polite"><div class="welcome"><div class="spark">✦</div><p class="eyebrow">PRIVATE, LOCAL, YOURS</p><h2>What’s on your mind?</h2><p>Ask a question, shape an idea, or give the agent a goal.<br>Everything stays in this workspace.</p><div class="suggestions"><button data-prompt="Explain a difficult concept using a simple example." type="button"><span>UNDERSTAND</span>Make something complex feel simple <b>↗</b></button><button data-prompt="Help me break my project into a practical step-by-step plan." type="button"><span>CREATE</span>Turn an idea into a clear plan <b>↗</b></button><button data-prompt="Help me debug my code. Ask me for the code and the error first." type="button"><span>BUILD</span>Work through a coding problem <b>↗</b></button></div></div></section>
+    <footer><form id="composer"><label class="sr-only" for="prompt">Message MyAi</label><textarea id="prompt" rows="2" maxlength="16000" placeholder="Ask anything. Keep it yours." required></textarea><div class="composer-bottom"><span id="composer-hint">Load a model to begin · Shift+Enter for a new line</span><button type="button" id="stop" class="subtle" hidden>Stop</button><button id="send" class="primary" type="submit" disabled>Send <span aria-hidden="true">↗</span></button></div></form><p class="footnote">Local AI can make mistakes. Check important answers.</p></footer>
+  </main>
+
+  <section id="command-palette" class="palette" hidden role="dialog" aria-modal="true" aria-labelledby="palette-title">
+    <div class="palette-backdrop" data-palette-close></div>
+    <div class="palette-panel"><div class="palette-head"><div><span class="eyebrow">QUICK ACTIONS</span><h2 id="palette-title">Command palette</h2></div><button type="button" class="subtle" data-palette-close>Esc</button></div><input id="palette-search" type="search" placeholder="Search commands…" autocomplete="off"><div id="palette-list" role="listbox"></div></div>
+  </section>
+</body>
+</html>

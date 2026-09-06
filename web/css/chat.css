@@ -1,0 +1,28 @@
+#messages { padding: 24px 4px; }
+.welcome { padding: 8vh 0 30px; }
+.welcome .spark { color: var(--chat); text-shadow: 0 0 30px var(--chat); }
+.welcome h2 { color: var(--text); font: 40px Georgia, serif; letter-spacing: -.04em; }
+.welcome p:not(.eyebrow) { color: var(--muted); }
+.suggestions { gap: 10px; max-width: 850px; }
+.suggestions button { min-height: 112px; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(255, 255, 255, .025); color: var(--text); }
+.suggestions button:hover { border-color: rgba(139, 135, 255, .45); background: var(--accent-soft); }
+.suggestions span { color: var(--chat); }
+.suggestions b { float: right; color: var(--muted); }
+.message { max-width: 900px; margin-bottom: 20px; }
+.message .role { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.message .role::before { content: "M"; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font-size: 11px; }
+.message.user .role::before { content: "Y"; background: rgba(56, 217, 194, .13); color: var(--code); }
+.message.user { border: 1px solid rgba(56, 217, 194, .15); background: rgba(56, 217, 194, .06); }
+.message.assistant { padding: 15px 18px; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(255, 255, 255, .02); }
+.message .content { color: #dce3eb; }
+.content pre, #change-diff { position: relative; padding: 18px 18px 18px 44px; border: 1px solid var(--line); background: #0b0e13; color: #d9e5ef; }
+.content pre::before { content: "CODE"; position: absolute; top: 7px; right: 10px; color: var(--faint); font-size: 9px; letter-spacing: .12em; }
+.content code { color: #d9e5ef; }
+.message details, #messages > details { max-width: 900px; margin: 8px auto; padding: 10px 13px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255, 255, 255, .025); }
+#messages > details summary { cursor: pointer; color: var(--agent); font-size: 12px; }
+#messages > details pre { white-space: pre-wrap; max-height: 240px; overflow: auto; color: var(--muted); }
+#composer { border-color: var(--line-strong); background: var(--surface-overlay); box-shadow: 0 12px 40px rgba(0, 0, 0, .2); backdrop-filter: blur(16px); }
+#composer textarea { color: var(--text); }
+.copy { color: var(--muted); }
+.footnote { color: var(--faint); }
+@media (max-width: 700px) { .welcome h2 { font-size: 31px; } .suggestions { grid-template-columns: 1fr; } .suggestions button { min-height: auto; } }

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from .storage import Store
 from .engine import Engine
+from .hardware import detect_hardware
 from .media import Media
 from .workbench import Workbench
 from .agent import AutonomousAgent, AgentStopped
@@ -82,7 +83,13 @@ def make_server(app, port=0):
             static = {"/": ("index.html", "text/html; charset=utf-8"),
                       "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                       "/style.css": ("style.css", "text/css; charset=utf-8"),
+                      "/css/theme.css": ("css/theme.css", "text/css; charset=utf-8"),
+                      "/css/nav.css": ("css/nav.css", "text/css; charset=utf-8"),
+                      "/css/chat.css": ("css/chat.css", "text/css; charset=utf-8"),
+                      "/css/studio.css": ("css/studio.css", "text/css; charset=utf-8"),
                       "/js/progress_manager.js": ("js/progress_manager.js", "text/javascript; charset=utf-8"),
+                      "/js/nav.js": ("js/nav.js", "text/javascript; charset=utf-8"),
+                      "/js/chat.js": ("js/chat.js", "text/javascript; charset=utf-8"),
                       "/css/progress.css": ("css/progress.css", "text/css; charset=utf-8")}
             if path in static:
                 name, kind = static[path]
@@ -105,7 +112,12 @@ def make_server(app, port=0):
                         while chunk := stream.read(65536):
                             self.wfile.write(chunk)
                 elif path == "/api/status":
-                    self.output(200, {**app.engine.status(), "models": app.engine.models(),
+                    hardware = app.engine.hardware or detect_hardware()
+                    self.output(200, {**app.engine.status(), "hardware": {
+                                      "backend": hardware.backend,
+                                      "gpu_layers": hardware.gpu_layers,
+                                      "threads": hardware.threads,
+                                      }, "models": app.engine.models(),
                                       "busy": app.busy.locked(), "version": "0.2.0"})
                 elif path == "/api/chats":
                     self.output(200, app.store.list())

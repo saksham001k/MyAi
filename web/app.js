@@ -31,6 +31,11 @@ async function refresh() {
   if (!state.models.length) $("model").add(new Option("No GGUF models found", ""));
   if (state.models.some(m => m.name === selected)) $("model").value = selected;
   $("engine-status").textContent = running ? `● Ready · ${state.model}` : "○ No model loaded · local workspace";
+  if (state.hardware) {
+    const labels = {metal: "⚡ Apple Silicon Metal", cuda: "🟢 CUDA", vulkan: "◆ Vulkan", cpu: "○ CPU"};
+    const vram = state.hardware.vram_mb ? ` · ${Math.round(state.hardware.vram_mb / 1024)} GB VRAM` : "";
+    $("hardware-badge").textContent = `${labels[state.hardware.backend] || state.hardware.backend}${vram}`;
+  }
   $("setup-hint").textContent = !state.runtime_found ? `Setup: put llama-server and its companion libraries in runtime/${state.platform}/. See docs/SETUP.md.` : !state.models.length ? "Add a compatible .gguf file to the models folder, then reload this page." : "Start with CPU and 4096 context. GPU mode needs a matching runtime. Larger context uses more memory.";
   $("composer-hint").textContent = running ? "Local only · Enter to send · Shift+Enter for a new line" : "Load a model to begin · Shift+Enter for a new line";
   $("send").disabled = busy || !running;
@@ -136,6 +141,7 @@ document.querySelectorAll("[data-workspace]").forEach(button => button.onclick =
   if (busy) return notice("Wait for the active operation to finish.");
   const mode = button.dataset.workspace; const studio = mode === "image" || mode === "video";
   document.querySelectorAll("[data-workspace]").forEach(b => b.classList.toggle("primary", b === button));
+  document.body.dataset.mode = mode === "image" || mode === "video" ? "studio" : mode;
   $("studio").hidden = !studio; $("messages").hidden = studio; document.querySelector("footer").hidden = studio;
   document.querySelector(".engine-bar").hidden = studio; $("settings").hidden = studio;
   if (studio) { mediaKind = mode; $("video-opt-in").hidden = mode !== "video"; await refreshMedia().catch(e => notice(e.message)); }
