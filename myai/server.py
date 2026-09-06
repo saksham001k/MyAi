@@ -29,9 +29,12 @@ def make_server(app, port=0):
         def log_message(self, *args):
             pass  # Never log prompts or session tokens.
 
-        def headers_out(self, code, kind="application/json; charset=utf-8"):
+        def headers_out(self, code, kind="application/json; charset=utf-8", length=None):
             self.send_response(code)
             self.send_header("Content-Type", kind)
+            if length is not None:
+                self.send_header("Content-Length", str(length))
+            self.send_header("Connection", "close")
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
@@ -39,8 +42,9 @@ def make_server(app, port=0):
             self.end_headers()
 
         def output(self, code, obj):
-            self.headers_out(code)
-            self.wfile.write(json.dumps(obj).encode())
+            payload = json.dumps(obj).encode()
+            self.headers_out(code, length=len(payload))
+            self.wfile.write(payload)
 
         def authorized(self):
             expected_host = f"127.0.0.1:{self.server.server_port}"
@@ -101,10 +105,17 @@ def make_server(app, port=0):
         def do_POST(self):
             if not self.authorized():
                 return
+            # Drain bounded request bodies before an early busy/cancel response.
+            # Closing with unread data can reset the socket on macOS.
+            try:
+                body = self.body()
+            except (ValueError, TypeError) as exc:
+                self.output(400, {"error": str(exc)})
+                return
             path = urlparse(self.path).path
             if path == "/api/media/start":
                 try:
-                    self.output(202, app.media.start(self.body()))
+                    self.output(202, app.media.start(body))
                 except (ValueError, TypeError) as exc:
                     self.output(400, {"error": str(exc)})
                 return
@@ -120,7 +131,6 @@ def make_server(app, port=0):
                 self.output(409, {"error": "An operation is already in progress. Stop it or wait."})
                 return
             try:
-                body = self.body()
                 if path == "/api/chats":
                     self.output(201, app.store.create())
                 elif path == "/api/engine/start":

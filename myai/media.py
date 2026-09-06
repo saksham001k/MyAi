@@ -8,6 +8,7 @@ import time
 import uuid
 from pathlib import Path
 from .engine import platform_tag
+from .runtime import executable
 
 PRESETS = {
     "sd15": {"name": "Stable Diffusion 1.5", "kind": "image", "files": {"-m": "images/v1-5-pruned-emaonly.safetensors"}},
@@ -39,7 +40,7 @@ class Media:
 
     @property
     def binary(self):
-        return self.root / "runtime" / platform_tag() / ("sd-cli.exe" if os.name == "nt" else "sd-cli")
+        return executable(self.root / "runtime" / platform_tag(), "sd-cli.exe" if os.name == "nt" else "sd-cli")
 
     def catalog(self):
         result = []

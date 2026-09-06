@@ -9,6 +9,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from .runtime import executable
 
 
 def platform_tag():
@@ -31,7 +32,7 @@ class Engine:
     @property
     def binary(self):
         name = "llama-server.exe" if os.name == "nt" else "llama-server"
-        return self.root / "runtime" / platform_tag() / name
+        return executable(self.root / "runtime" / platform_tag(), name)
 
     def models(self):
         return [{"name": p.name, "bytes": p.stat().st_size}

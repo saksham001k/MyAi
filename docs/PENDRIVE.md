@@ -1,5 +1,21 @@
 # Pendrive stage (PD)
 
+## Automated preparation
+
+The portable build workflow now produces a combined bundle with native Apple Silicon Mac, Windows x64, and Linux x64 apps plus pinned inference runtimes. It publishes a prerelease only after native runtime startup and app/API/storage smoke checks pass on every platform. This still does not validate real model inference on every target computer.
+
+When a successful portable release is available, close MyAi and run from your source checkout:
+
+```bash
+python3 scripts/prepare_pendrive.py --destination "/Volumes/YOUR_DRIVE/MyAi"
+```
+
+Replace YOUR_DRIVE with the actual mounted drive name. The destination must be a NEW folder. The helper downloads and verifies the bundle, copies installed models and saved conversations into Workspace, and keeps your original Mac folder. It never formats the drive or overwrites an existing destination. Close MyAi first so media outputs are not changing during the copy.
+
+At the destination root, use Start-Mac.command, Start-Windows.bat, or Start-Linux.sh. Each calculates the shared Workspace location relative to itself. Changing drive letters or mount names does not require configuration. Unix launchers may need execution permission after a manual ZIP extraction; the helper preserves the ZIP's mode metadata. Some Linux mounts use noexec and cannot launch programs from that drive without changing mount configuration or copying the folder locally.
+
+Supported initial architectures are Mac ARM64 and Windows/Linux x86_64. Windows/Linux runtimes are CPU builds. Linux binaries target Ubuntu 24.04-era systems; older libc versions and older CPUs may not work. Keep all Apps and Workspace subfolders together. Models are shared, native binaries are not. Physical pendrive and additional model testing remain deferred.
+
 **Current gate: source implementation ready for setup; real-model and physical-drive validation pending.** A successful unit test or package build does not complete this stage.
 
 ## Before copying to the drive

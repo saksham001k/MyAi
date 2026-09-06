@@ -52,6 +52,7 @@ class ServerTests(unittest.TestCase):
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.url = f"http://127.0.0.1:{self.server.server_port}"
+        self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def tearDown(self):
         self.server.shutdown()
@@ -68,10 +69,11 @@ class ServerTests(unittest.TestCase):
             data=json.dumps(body).encode() if body is not None else None,
             headers=h, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=5) as response:
+            with self.http.open(req, timeout=5) as response:
                 return response.status, response.read()
         except urllib.error.HTTPError as exc:
-            return exc.code, exc.read()
+            with exc:
+                return exc.code, exc.read()
 
     def chat(self):
         return json.loads(self.request("/api/chats", {})[1])["id"]

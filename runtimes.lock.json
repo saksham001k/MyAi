@@ -1,0 +1,56 @@
+{
+  "darwin-arm64": [
+    {
+      "repo": "ggml-org/llama.cpp",
+      "tag": "b10825",
+      "name": "llama-b10825-bin-macos-arm64.tar.gz",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10825/llama-b10825-bin-macos-arm64.tar.gz",
+      "sha256": "b02b75823042b8d94375fc7be583a170c02e0c9d7bbe021ce440e5daa1322978",
+      "executable": "llama-server"
+    },
+    {
+      "repo": "leejet/stable-diffusion.cpp",
+      "tag": "master-841-6b3edaa",
+      "name": "sd-master-6b3edaa-bin-Darwin-macOS-26.5.2-arm64.zip",
+      "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-841-6b3edaa/sd-master-6b3edaa-bin-Darwin-macOS-26.5.2-arm64.zip",
+      "sha256": "1c7d0ddc18752cd88c084e0a636444697a0caea96763dcebdc08089ecf57b72f",
+      "executable": "sd-cli"
+    }
+  ],
+  "windows-x86_64": [
+    {
+      "repo": "ggml-org/llama.cpp",
+      "tag": "b10825",
+      "name": "llama-b10825-bin-win-cpu-x64.zip",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10825/llama-b10825-bin-win-cpu-x64.zip",
+      "sha256": "25c5b555cd48e80f2376006885aa8e5d2b7df89cbf6e3f2022f5234fd31c76b4",
+      "executable": "llama-server.exe"
+    },
+    {
+      "repo": "leejet/stable-diffusion.cpp",
+      "tag": "master-841-6b3edaa",
+      "name": "sd-master-6b3edaa-bin-win-cpu-x64.zip",
+      "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-841-6b3edaa/sd-master-6b3edaa-bin-win-cpu-x64.zip",
+      "sha256": "a36edb067de09fc9f70fcd193e519ff62592f860744558d7918762c7c3401050",
+      "executable": "sd-cli.exe"
+    }
+  ],
+  "linux-x86_64": [
+    {
+      "repo": "ggml-org/llama.cpp",
+      "tag": "b10825",
+      "name": "llama-b10825-bin-ubuntu-x64.tar.gz",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10825/llama-b10825-bin-ubuntu-x64.tar.gz",
+      "sha256": "306e2103829a22aae4aa7b10140434fb2c4f3f6022ab9f6b25a7b6d286b80487",
+      "executable": "llama-server"
+    },
+    {
+      "repo": "leejet/stable-diffusion.cpp",
+      "tag": "master-841-6b3edaa",
+      "name": "sd-master-6b3edaa-bin-Linux-Ubuntu-24.04-x86_64.zip",
+      "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-841-6b3edaa/sd-master-6b3edaa-bin-Linux-Ubuntu-24.04-x86_64.zip",
+      "sha256": "66998807a8b21b6d00358310a23791c67d2e68f7e1820d99d5c9ac12738d882e",
+      "executable": "sd-cli"
+    }
+  ]
+}
