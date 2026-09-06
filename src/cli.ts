@@ -11,6 +11,9 @@ import { SelfHealingEngine } from "./engine/healer.js";
 import { extractSymbolAtLocation } from "./indexer/slicer.js";
 import { OllamaProvider } from "./providers/ollama.js";
 import { checkOllama } from "./providers/health.js";
+import { AgentLoop } from "./agent/loop.js";
+import { createAgentTools } from "./agent/tools.js";
+import { IsolatedWorktree } from "./guardrails/worktree.js";
 
 async function approve(filePath: string): Promise<boolean> {
   const staged = execFileSync("git", ["diff", "--cached", "--name-only", "--", filePath], { encoding: "utf8" }).trim();
@@ -37,6 +40,46 @@ function showDiff(filePath: string, before: string, after: string): void {
 const program = new Command()
   .name("myai")
   .description("Autonomous local developer repair engine");
+
+program
+  .command("build")
+  .argument("<goal>")
+  .option("--max-steps <number>", "maximum agent steps", "10")
+  .action(async (goal: string, options: { maxSteps: string }) => {
+    const provider = new OllamaProvider();
+    const model = {
+      generate: async (prompt: string) => provider.generatePatch(prompt, {
+        filePath: "agent.ts", name: "task", kind: "SourceFile",
+        startLine: 0, endLine: 0, source: ""
+      }, "")
+    };
+    const worktree = new IsolatedWorktree(process.cwd(), `task-${Date.now()}`);
+    let created = false;
+    try {
+      const workspace = await worktree.create();
+      created = true;
+      const loop = new AgentLoop(model, createAgentTools(workspace), {
+        maxSteps: Number(options.maxSteps),
+        onEvent: (event) => console.log(chalk.cyan(`[${event.type}] ${event.content}`))
+      });
+      const result = await loop.run(goal);
+      const diff = await worktree.diff();
+      if (result.success) {
+        console.log(chalk.green(result.answer));
+        console.log(chalk.cyan(diff || "No file changes were produced."));
+        console.log(chalk.yellow(
+          `Review and squash-merge branch ${worktree.branch} into main when ready. Worktree: ${workspace}`
+        ));
+        created = false;
+      } else {
+        console.log(chalk.red(result.answer));
+        await worktree.discard();
+        created = false;
+      }
+    } finally {
+      if (created) await worktree.discard();
+    }
+  });
 
 program
   .command("inspect")
