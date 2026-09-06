@@ -9,6 +9,7 @@ import uuid
 from .engine import platform_tag
 from .runtime import executable
 from .progress import progress_event
+from .studio import preprocess_image
 
 PRESETS = {
     "sd15": {"name": "Stable Diffusion 1.5", "kind": "image", "files": {"-m": "images/v1-5-pruned-emaonly.safetensors"}},
@@ -101,6 +102,12 @@ class Media:
         size = 512 if body["preset"] != "sdxl" else 768
         args += ["-p", prompt.strip(), "-W", str(256 if video else size), "-H", str(256 if video else size),
                  "--steps", str(steps), "--seed", str(seed), "-o", str(output)]
+        if body.get("negative_prompt"):
+            if not isinstance(body["negative_prompt"], str) or len(body["negative_prompt"]) > 4000:
+                raise ValueError("Negative prompt must be text up to 4000 characters.")
+            args += ["-n", body["negative_prompt"].strip()]
+        if body.get("img2img"):
+            args += ["--init-img", body["source_path"], "--strength", str(body["strength"])]
         if video:
             args += ["-M", "vid_gen", "--video-frames", "17", "--cfg-scale", "6.0",
                      "--sampling-method", "euler", "--flow-shift", "3.0", "--offload-to-cpu", "--diffusion-fa"]
@@ -119,6 +126,43 @@ class Media:
                    "seed": body.get("seed", 42), "steps": body.get("steps", 20), "status": "running",
                    "created": time.time(), "error": None,
                    "progress": progress_event("studio", "Structuring composition", 5)}
+            self.save(job)
+            self.thread = threading.Thread(target=self.run, args=(job, args, output), daemon=True)
+            self.thread.start()
+            return job
+        except Exception:
+            self.app.busy.release()
+            raise
+
+    def start_img2img(self, body):
+        """Create an img2img job after validating and normalizing its source."""
+        prompt = body.get("prompt")
+        if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 4000:
+            raise ValueError("Enter an image editing prompt of up to 4000 characters.")
+        strength = body.get("strength", 0.65)
+        if type(strength) not in (int, float) or not 0.1 <= strength <= 0.95:
+            raise ValueError("Strength must be between 0.1 and 0.95.")
+        preset = body.get("preset", "sd15")
+        target = 768 if preset == "sdxl" else 512
+        jid = uuid.uuid4().hex
+        folder = self.directory / jid
+        source = preprocess_image(body.get("image"), folder / "source.png", target)
+        payload = dict(body, preset=preset, img2img=True, source_path=str(source["path"]),
+                       strength=float(strength))
+        args, output, kind = self.command(payload, folder)
+        if kind != "image":
+            raise ValueError("Image editing requires an image preset.")
+        if not self.app.busy.acquire(blocking=False):
+            raise ValueError("Another operation is running. Wait for it to finish.")
+        try:
+            folder.mkdir(exist_ok=True)
+            self.cancel_event.clear()
+            job = {"id": jid, "kind": kind, "preset": preset, "prompt": prompt,
+                   "source": {"width": source["width"], "height": source["height"]},
+                   "strength": float(strength), "img2img": True,
+                   "seed": payload.get("seed", 42), "steps": payload.get("steps", 20),
+                   "status": "running", "created": time.time(), "error": None,
+                   "progress": progress_event("studio", "Reading source image", 5)}
             self.save(job)
             self.thread = threading.Thread(target=self.run, args=(job, args, output), daemon=True)
             self.thread.start()
@@ -177,6 +221,15 @@ class Media:
         if job["status"] != "complete":
             raise KeyError("Creation is not complete")
         return self.directory / jid / ("output.avi" if job["kind"] == "video" else "output.png")
+
+    def source(self, jid):
+        job = self.get(jid)
+        if not job.get("img2img"):
+            raise KeyError("Source image not found")
+        path = self.directory / jid / "source.png"
+        if not path.is_file():
+            raise KeyError("Source image not found")
+        return path
 
     def close(self):
         self.cancel_event.set()

@@ -71,8 +71,8 @@ def make_server(app, port=0):
 
         def body(self):
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 256_000:
-                raise ValueError("Request must be between 1 byte and 256 KB.")
+            if not 0 < length <= 25 * 1024 * 1024:
+                raise ValueError("Request must be between 1 byte and 25 MB.")
             obj = json.loads(self.rfile.read(length))
             if not isinstance(obj, dict):
                 raise ValueError("Expected a JSON object")
@@ -112,6 +112,12 @@ def make_server(app, port=0):
                     with result.open("rb") as stream:
                         while chunk := stream.read(65536):
                             self.wfile.write(chunk)
+                elif path.startswith("/api/media/source/"):
+                    source = app.media.source(path.rsplit("/", 1)[1])
+                    self.headers_out(200, "image/png")
+                    with source.open("rb") as stream:
+                        while chunk := stream.read(65536):
+                            self.wfile.write(chunk)
                 elif path == "/api/status":
                     hardware = app.engine.hardware or detect_hardware()
                     self.output(200, {**app.engine.status(), "hardware": {
@@ -148,6 +154,12 @@ def make_server(app, port=0):
             if path == "/api/media/start":
                 try:
                     self.output(202, app.media.start(body))
+                except (ValueError, TypeError) as exc:
+                    self.output(400, {"error": str(exc)})
+                return
+            if path == "/api/studio/img2img":
+                try:
+                    self.output(202, app.media.start_img2img(body))
                 except (ValueError, TypeError) as exc:
                     self.output(400, {"error": str(exc)})
                 return

@@ -135,6 +135,7 @@ bindSuggestions();
 Promise.all([refresh(), listChats()]).catch(e => notice(e.message));
 
 let workspaceMode = "chat", mediaKind = "image", mediaPoll = null;
+let studioWorkflow = "text", sourceImageData = "";
 const mediaURLs = [];
 function clearMediaURLs() { for (const url of mediaURLs.splice(0)) URL.revokeObjectURL(url); }
 document.querySelectorAll("[data-workspace]").forEach(button => button.onclick = async () => {
@@ -147,6 +148,53 @@ document.querySelectorAll("[data-workspace]").forEach(button => button.onclick =
   if (studio) { mediaKind = mode; $("video-opt-in").hidden = mode !== "video"; await refreshMedia().catch(e => notice(e.message)); }
   else { workspaceMode = mode; $("prompt").placeholder = mode === "code" ? "Paste code, describe a bug, or ask for an implementation…" : "Ask anything. Keep it yours."; await refresh().catch(e => notice(e.message)); }
 });
+function setStudioWorkflow(workflow) {
+  studioWorkflow = workflow;
+  $("img2img-panel").hidden = workflow !== "img2img";
+  $("text-to-image").classList.toggle("active", workflow === "text");
+  $("image-to-image").classList.toggle("active", workflow === "img2img");
+  $("text-to-image").setAttribute("aria-selected", String(workflow === "text"));
+  $("image-to-image").setAttribute("aria-selected", String(workflow === "img2img"));
+  $("media-prompt").placeholder = workflow === "img2img" ? "Describe what changes to make to this image…" : "Describe the scene, subject, or atmosphere…";
+}
+function showSourceImage(file) {
+  if (!file || !["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 20 * 1024 * 1024) {
+    return notice("Choose a PNG, JPG, JPEG, or WebP image up to 20 MB.");
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    sourceImageData = reader.result;
+    const image = new Image();
+    image.onload = () => {
+      $("image-preview").replaceChildren(image);
+      $("image-meta").hidden = false;
+      $("image-meta").textContent = `${file.name} · ${image.naturalWidth} × ${image.naturalHeight} · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+      $("image-clear").hidden = false;
+    };
+    image.src = sourceImageData;
+  };
+  reader.readAsDataURL(file);
+}
+function clearSourceImage() {
+  sourceImageData = "";
+  $("image-file").value = "";
+  $("image-meta").hidden = true;
+  $("image-clear").hidden = true;
+  $("image-preview").innerHTML = "<span>Drop a PNG, JPG, JPEG, or WebP here</span><small>Up to 20 MB · click to browse</small>";
+}
+$("text-to-image").onclick = () => setStudioWorkflow("text");
+$("image-to-image").onclick = () => setStudioWorkflow("img2img");
+$("image-file").onchange = event => showSourceImage(event.target.files[0]);
+$("image-clear").onclick = clearSourceImage;
+$("image-dropzone").onclick = event => { if (event.target !== $("image-clear")) $("image-file").click(); };
+["dragenter", "dragover"].forEach(type => $("image-dropzone").addEventListener(type, event => { event.preventDefault(); $("image-dropzone").classList.add("dragover"); }));
+["dragleave", "drop"].forEach(type => $("image-dropzone").addEventListener(type, event => { event.preventDefault(); $("image-dropzone").classList.remove("dragover"); }));
+$("image-dropzone").addEventListener("drop", event => showSourceImage(event.dataTransfer.files[0]));
+$("image-strength").oninput = event => {
+  const value = Number(event.target.value);
+  const label = value < 0.5 ? "Subtle tweak / touch-up" : value < 0.85 ? "Balanced transformation (Recommended)" : "Major creative overhaul";
+  $("strength-value").textContent = `${value.toFixed(2)} · ${label}`;
+};
 async function refreshMedia() {
   const state = await (await api("/api/media")).json();
   const selected = $("media-preset").value; $("media-preset").replaceChildren();
@@ -170,7 +218,18 @@ async function refreshMedia() {
     const detail = document.createElement("small"); detail.textContent = `${job.status} · seed ${job.seed} · ${job.seconds || 0}s` + (job.error ? ` · ${job.error}` : ""); card.append(title, detail);
     if (job.status === "complete") {
       const button = document.createElement("button"); button.textContent = job.kind === "video" ? "Download video (AVI)" : "View / download image";
-      button.onclick = async () => { try { const blob = await (await api(`/api/media/result/${job.id}`)).blob(); const url = URL.createObjectURL(blob); mediaURLs.push(url); if(job.kind === "image") {const img = document.createElement("img"); img.src = url; img.alt = job.prompt; card.append(img);} const link = document.createElement("a"); link.href = url; link.download = `MyAi-${job.id}.${job.kind === "video" ? "avi" : "png"}`; link.textContent = "Save file ↓"; card.append(link); if (job.kind === "video") link.click(); button.disabled = true; } catch(e) { notice(e.message); } }; card.append(button);
+      button.onclick = async () => { try { const blob = await (await api(`/api/media/result/${job.id}`)).blob(); const url = URL.createObjectURL(blob); mediaURLs.push(url); if(job.kind === "image") {const img = document.createElement("img"); img.src = url; img.alt = job.prompt; card.append(img); if (job.img2img) await addComparison(card, job.id, url); } const link = document.createElement("a"); link.href = url; link.download = `KISS-${job.id}.${job.kind === "video" ? "avi" : "png"}`; link.textContent = "Save file ↓"; card.append(link); if (job.kind === "video") link.click(); button.disabled = true; } catch(e) { notice(e.message); } }; card.append(button);
+    }
+    async function addComparison(card, jid, resultURL) {
+      const sourceResponse = await api(`/api/media/source/${jid}`);
+      const sourceURL = URL.createObjectURL(await sourceResponse.blob()); mediaURLs.push(sourceURL);
+      const compare = document.createElement("div"); compare.className = "comparison";
+      const before = document.createElement("img"); before.src = sourceURL; before.alt = "Before editing";
+      const afterWrap = document.createElement("div"); afterWrap.className = "comparison-after";
+      const after = document.createElement("img"); after.src = resultURL; after.alt = "After editing";
+      const range = document.createElement("input"); range.type = "range"; range.min = "0"; range.max = "100"; range.value = "50"; range.setAttribute("aria-label", "Before and after comparison");
+      range.oninput = () => { afterWrap.style.width = `${range.value}%`; };
+      afterWrap.append(after); compare.append(before, afterWrap, range); card.append(compare);
     }
     $("creations").append(card);
   }
@@ -178,7 +237,15 @@ async function refreshMedia() {
 }
 $("media-generate").onclick = async () => {
   $("media-generate").disabled = true; notice(); progressManager.start("studio");
-  try { await api("/api/media/start", "POST", {preset: $("media-preset").value, prompt: $("media-prompt").value, steps: Number($("media-steps").value), seed: Number($("media-seed").value), experimental: $("video-confirm").checked}); } catch(e) { notice(e.message); }
+  try {
+    const payload = {preset: $("media-preset").value, prompt: $("media-prompt").value, steps: Number($("media-steps").value), seed: Number($("media-seed").value), experimental: $("video-confirm").checked};
+    const endpoint = studioWorkflow === "img2img" ? "/api/studio/img2img" : "/api/media/start";
+    if (studioWorkflow === "img2img") {
+      if (!sourceImageData) throw new Error("Upload a source image before editing.");
+      payload.image = sourceImageData; payload.strength = Number($("image-strength").value); payload.negative_prompt = $("negative-prompt").value;
+    }
+    await api(endpoint, "POST", payload);
+  } catch(e) { notice(e.message); }
   await refreshMedia().catch(e => notice(e.message));
 };
 $("media-stop").onclick = async () => { try {await api("/api/media/cancel", "POST", {}); await refreshMedia();} catch(e) {notice(e.message);} };
