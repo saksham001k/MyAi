@@ -1,136 +1,277 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0a0c10">
-  <title>MyAi · Your local assistant</title>
-  <link rel="stylesheet" href="/css/theme.css">
-  <link rel="stylesheet" href="/css/base.css">
-  <link rel="stylesheet" href="/css/layout.css">
-  <link rel="stylesheet" href="/css/nav.css">
-  <link rel="stylesheet" href="/css/chat.css">
-  <link rel="stylesheet" href="/css/studio.css">
-  <link rel="stylesheet" href="/css/progress.css">
-  <script src="/js/toast.js" defer></script>
-  <script src="/js/file_ingestion.js" defer></script>
-  <script src="/js/uploader.js" defer></script>
-  <script src="/js/diff_viewer.js" defer></script>
-  <script src="/js/progress_manager.js" defer></script>
-  <script src="/js/nav.js" defer></script>
-  <script src="/js/chat.js" defer></script>
-  <script src="/app.js" defer></script>
-  <script src="/js/tasks.js" defer></script>
-</head>
-<body>
-  <a class="skip-link" href="#main-content">Skip to main content</a>
-  <aside class="sidebar" aria-label="Workspace navigation">
-    <a class="brand" href="/" aria-label="MyAi home"><strong>MyAi</strong><span class="version">LOCAL</span></a>
-    <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-expanded="true">‹</button>
-    <button id="new-chat" class="new" type="button"><span aria-hidden="true">＋</span> New conversation</button>
-    <label class="search-label" for="search">Conversations</label>
-    <input id="search" type="search" placeholder="Search titles…" autocomplete="off">
-    <nav id="history" aria-label="Conversation history"></nav>
-    <div class="sidebar-bottom"><span class="dot"></span><div><strong>Private by design</strong><small>Conversations stay in this workspace.</small></div></div>
-  </aside>
-
-  <main id="main-content">
-    <header class="topbar">
-      <div class="topbar-title"><span class="eyebrow">YOUR PRIVATE WORKSPACE</span><h1 id="chat-title">What would you like to get done?</h1></div>
-      <div class="topbar-actions">
-        <span id="hardware-badge" class="status-badge" title="Detected local acceleration">◌ Detecting hardware</span>
-        <button id="palette-open" class="icon-button" type="button" aria-label="Open command palette" title="Command palette (⌘K)">⌘K</button>
-        <button id="export" class="subtle" type="button">Export ↓</button>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0c10" />
+    <title>KISS · One place for everything</title>
+    <link rel="stylesheet" href="/css/theme.css" />
+    <link rel="stylesheet" href="/css/base.css" />
+    <link rel="stylesheet" href="/css/layout.css" />
+    <link rel="stylesheet" href="/css/nav.css" />
+    <link rel="stylesheet" href="/css/chat.css" />
+    <link rel="stylesheet" href="/css/unified.css" />
+    <script src="/js/toast.js" defer></script>
+    <script src="/js/uploader.js" defer></script>
+    <script src="/app.js" defer></script>
+    <script src="/js/tasks.js" defer></script>
+    <script src="/js/nav.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to workspace</a>
+    <aside class="sidebar" aria-label="Saved work">
+      <a class="brand" href="/" aria-label="KISS home"
+        ><img src="/logo.svg" alt="KISS" width="140" height="32" />
+        <span class="version">LOCAL</span></a
+      ><button
+        id="sidebar-toggle"
+        type="button"
+        class="sidebar-toggle"
+        aria-label="Collapse sidebar"
+        aria-expanded="true"
+      >
+        ‹</button
+      ><button id="new-chat" class="new" type="button">
+        ＋ New conversation</button
+      ><label class="search-label" for="search">Your conversations & work</label
+      ><input id="search" type="search" placeholder="Search saved work…" />
+      <div id="saved-work">
+        <nav id="history" aria-label="Conversations"></nav>
+        <nav
+          id="task-list"
+          class="task-list"
+          aria-label="Saved project work and research"
+        ></nav>
+        <nav
+          id="media-list"
+          class="task-list"
+          aria-label="Saved creations"
+        ></nav>
       </div>
-    </header>
-
-    <nav class="mode-nav" aria-label="Modes">
-      <span class="mode-indicator" aria-hidden="true"></span>
-      <button data-workspace="chat" class="mode-tab primary" type="button"><span>Chat</span><kbd>1</kbd></button>
-      <button data-workspace="code" class="mode-tab" type="button"><span>Code</span><kbd>2</kbd></button>
-      <button data-workspace="image" class="mode-tab" type="button"><span>Studio</span><kbd>3</kbd></button>
-      <button data-workspace="docs" class="mode-tab" type="button"><span>Docs</span><kbd>4</kbd></button>
-      <button data-workspace="agent" class="mode-tab" type="button"><span>Tasks</span><kbd>5</kbd></button>
-    </nav>
-
-    <section class="engine-bar" aria-label="Model status">
-      <span id="engine-status" role="status"><span class="status-dot"></span> Checking workspace…</span>
-      <div class="engine-actions">
-        <label class="model-compact">Model<select id="model"><option value="">No models yet</option></select></label>
-        <label class="auto-toggle" hidden><input id="auto-approve" type="checkbox"><span class="toggle-track" aria-hidden="true"></span><span>Auto-approve</span></label>
-        <button id="quick-load" class="primary" type="button">Load selected model</button>
-        <button id="settings-toggle" class="subtle" type="button" aria-expanded="false" aria-controls="settings" aria-label="Open settings">⚙ Settings</button>
+      <div class="sidebar-bottom">
+        On your computer.<small>No account or message credits.</small>
       </div>
-    </section>
-
-    <section id="settings" class="settings" hidden>
-      <div class="settings-heading"><div><h2>Model controls</h2><p>Keep inference local. Tune the runtime for this machine.</p></div><span class="settings-kicker">LOCAL RUNTIME</span></div>
-      <div class="controls">
-        <label>Context<select id="context"><option>2048</option><option selected>4096</option><option>8192</option><option>16384</option></select></label>
-        <label>Acceleration<select id="gpu"><option value="auto" selected>Automatic · recommended</option><option value="0">CPU · compatible</option><option value="999">GPU · if supported</option></select></label>
-        <button id="load" class="primary" type="button">Load model</button><button id="unload" class="subtle" type="button">Unload</button>
-      </div>
-      <p id="setup-hint" class="hint">Checking local files…</p>
-      <details><summary>Personal response preferences</summary><label>How should MyAi answer?<textarea id="personal-instructions" maxlength="4000" rows="2" placeholder="For example: explain in simple Hinglish, be concise, give complete code."></textarea></label><div class="controls"><label>Maximum response tokens<select id="output-tokens"><option>512</option><option>1024</option><option selected>2048</option><option>4096</option><option>8192</option></select></label><button id="save-preferences" type="button">Save locally</button></div><p class="local-note">No message quota. Response length is bounded by the chosen model's available context and memory.</p></details>
-    </section>
-
-    <section id="task-panel" class="task-panel" hidden>
-      <h2>Give MyAi a task</h2>
-      <p class="task-intro">Use your loaded local model to work on a project or research the web. No AI account, credits or paid API required. Reports and working copies stay on this computer.</p>
-      <form id="task-form" class="task-form">
-        <div class="task-row"><label>Work type<select id="task-kind"><option value="project">Work on a project</option><option value="research">Research and save a report · internet needed</option></select></label><label>Step budget<select id="task-steps"><option>6</option><option selected>12</option><option>20</option><option>50</option></select></label></div>
-        <div id="task-project-options" class="task-row"><label>Project folder on this computer<input id="task-project" placeholder="/Users/you/Projects/my-project" autocomplete="off"></label></div>
-        <label>Your goal<textarea id="task-goal" required maxlength="16000" rows="3"></textarea></label>
-        <div id="task-command-options"><label><input id="task-allow-commands" type="checkbox"> Allow commands for this trusted project</label><p class="local-note">File edits use a source-only copy. Commands run as your OS user and can access the host; this is not an OS sandbox. Enable only for projects and task instructions you trust. Model/data folders, credentials and ignored files are excluded from the copy.</p><div class="task-row"><label>Test command (optional)<input id="task-test" disabled placeholder="python3 -m unittest discover -s tests"></label></div></div>
-        <div class="task-buttons"><button id="task-start" type="submit" class="primary">Start local task</button><span class="local-note">Load a model above first. Review changes before applying.</span></div>
-      </form>
-      <p id="task-error" role="alert" class="notice" hidden></p>
-      <div class="task-layout"><nav id="task-list" class="task-list" aria-label="Saved tasks"></nav><section id="task-result" class="task-result" aria-label="Task result" hidden></section></div>
-    </section>
-    <p id="docs-note" class="task-document-note" hidden>Attach text files or text-based PDFs, then ask a question. MyAi uses extracted passages and cites filenames/pages. Scanned PDFs need OCR; images are stored only.</p>
-    <section id="studio" data-mode-view="studio" hidden>
-      <div class="studio-heading"><div><span class="eyebrow">GENERATIVE STUDIO</span><h2>Make something new.</h2><p id="studio-hint"></p></div><span class="studio-chip">LOCAL DIFFUSION</span></div>
-      <div class="studio-mode-switch" role="tablist" aria-label="Studio workflow"><button id="text-to-image" class="studio-mode active" type="button" role="tab" aria-selected="true">Text-to-Image</button><button id="image-to-image" class="studio-mode" type="button" role="tab" aria-selected="false">Image-to-Image / Edit</button></div>
-      <section id="img2img-panel" class="img2img-panel" hidden>
-        <div id="image-dropzone" class="image-dropzone" tabindex="0" role="button" aria-label="Upload source image"><input id="image-file" type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" hidden><div id="image-preview" class="image-preview"><span>Drop a PNG, JPG, JPEG, or WebP here</span><small>Up to 20 MB · click to browse</small></div><div id="image-meta" class="image-meta" hidden></div><button id="image-clear" type="button" hidden>Clear / Replace</button></div>
-        <label>Transformation intensity <input id="image-strength" type="range" min="0.1" max="0.95" step="0.05" value="0.65"><output id="strength-value">0.65 · Balanced transformation (Recommended)</output></label>
-        <label>Negative prompt <input id="negative-prompt" type="text" maxlength="4000" placeholder="Optional details to avoid…"></label>
+    </aside>
+    <main id="main-content">
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">ONE PLACE FOR EVERYTHING</span>
+          <h1 id="chat-title">What would you like to do?</h1>
+        </div>
+        <div class="topbar-actions">
+          <button
+            id="palette-open"
+            type="button"
+            aria-label="Open command palette"
+          >
+            ⌘K</button
+          ><button id="export" type="button" class="subtle">Export</button
+          ><button
+            id="settings-toggle"
+            type="button"
+            class="subtle"
+            aria-expanded="false"
+            aria-controls="settings"
+          >
+            Settings
+          </button>
+        </div>
+      </header>
+      <section id="settings" class="settings" hidden>
+        <h2>Local preferences</h2>
+        <p>
+          KISS selects and loads an installed model for each request. Nothing is
+          downloaded automatically.
+        </p>
+        <div class="controls">
+          <label
+            >Context<select id="context">
+              <option>4096</option>
+              <option selected>8192</option>
+              <option>16384</option>
+            </select></label
+          ><label
+            >Acceleration<select id="gpu">
+              <option value="auto">Automatic</option>
+              <option value="0">CPU</option>
+            </select></label
+          ><label
+            >Maximum response tokens<select id="output-tokens">
+              <option>512</option>
+              <option>1024</option>
+              <option selected>2048</option>
+              <option>4096</option>
+              <option>8192</option>
+            </select></label
+          >
+        </div>
+        <label
+          >How should KISS answer?<textarea
+            id="personal-instructions"
+            rows="2"
+            maxlength="4000"
+            placeholder="Your preferred language, style or level of detail…"
+          ></textarea>
+        </label>
+        <div class="controls">
+          <button id="save-preferences" type="button">Save preferences</button
+          ><button id="unload" type="button" class="subtle">
+            Unload model
+          </button>
+        </div>
+        <p id="setup-hint"></p>
+        <label
+          ><input id="video-confirm" type="checkbox" /> Enable experimental
+          video requests</label
+        >
       </section>
-      <div class="studio-canvas" aria-label="Generation preview"><div class="studio-canvas-glow"></div><span class="studio-canvas-mark">✦</span></div>
-      <p id="media-status" class="studio-stage" role="status">Ready for your next creation.</p>
-      <div class="studio-form">
-        <label>Model <select id="media-preset"></select></label>
-        <label>Prompt<textarea id="media-prompt" rows="3" maxlength="4000" placeholder="Describe the scene, subject, or atmosphere…"></textarea></label>
-        <div class="controls"><label>Steps<input id="media-steps" type="number" min="1" max="40" value="20"></label><label>Seed<input id="media-seed" type="number" min="0" max="2147483647" value="42"></label><button id="media-generate" class="primary" type="button">Generate</button><button id="media-stop" type="button">Cancel</button></div>
-        <label id="video-opt-in" hidden><input id="video-confirm" type="checkbox"> Enable experimental video</label>
+      <div id="notice" class="notice" role="alert" hidden></div>
+      <section
+        id="messages"
+        aria-label="Conversation and results"
+        aria-live="polite"
+      >
+        <div class="welcome">
+          <div class="spark">✦</div>
+          <p class="eyebrow">YOUR IDEAS. YOUR COMPUTER.</p>
+          <h2>Just tell me what you need.</h2>
+          <p>
+            Ask a question, work on code, research a topic, or create an
+            image.<br />One conversation. KISS chooses the tools and local
+            model.
+          </p>
+          <div class="suggestions">
+            <button
+              data-prompt="Explain a difficult concept using a simple example."
+              type="button"
+            >
+              Explain something</button
+            ><button
+              data-prompt="Research the latest Python release using official sources."
+              type="button"
+            >
+              Research a topic</button
+            ><button
+              data-prompt="Create an image of a quiet mountain lake at sunrise."
+              type="button"
+            >
+              Create an image
+            </button>
+          </div>
+        </div>
+      </section>
+      <footer>
+        <form id="composer">
+          <section id="attachment-area" hidden aria-label="Attached files">
+            <div class="attachment-heading">
+              <strong id="attachment-count">Attached files</strong
+              ><small
+                >Included in this conversation · click View to inspect</small
+              >
+            </div>
+            <div id="upload-chips" class="file-chips"></div>
+          </section>
+          <label class="sr-only" for="prompt">Tell KISS what to do</label
+          ><input
+            id="global-file-input"
+            type="file"
+            multiple
+            hidden
+            accept=".png,.jpg,.jpeg,.webp,.gif,.py,.js,.ts,.html,.css,.json,.md,.pdf,.txt,.csv"
+          /><textarea
+            id="prompt"
+            rows="2"
+            maxlength="16000"
+            placeholder="Ask, build, research, create…"
+            required
+          ></textarea>
+          <details id="project-access">
+            <summary>
+              Project access <span id="project-selected"></span>
+            </summary>
+            <p class="local-note">
+              For work on your files, choose a folder. Changes are prepared in a
+              copy for your review.
+            </p>
+            <label
+              >Project folder<input
+                id="task-project"
+                placeholder="/Users/you/Projects/my-project"
+                autocomplete="off" /></label
+            ><label class="command-grant"
+              ><input id="task-allow-commands" type="checkbox" /> Allow commands
+              for this trusted project</label
+            >
+            <p class="local-note">
+              Commands run as your OS user and can access this computer. File
+              tools use the selected source copy.
+            </p>
+            <div class="controls">
+              <label
+                >Test command<input
+                  id="task-test"
+                  disabled
+                  placeholder="python3 -m unittest discover -s tests" /></label
+              ><label
+                >Step budget<select id="task-steps">
+                  <option>6</option>
+                  <option selected>12</option>
+                  <option>20</option>
+                  <option>50</option>
+                </select></label
+              >
+            </div>
+          </details>
+          <div class="composer-bottom">
+            <button
+              id="attach-file"
+              type="button"
+              class="icon-button"
+              aria-label="Attach files"
+            >
+              ＋ Attach</button
+            ><span id="composer-hint"
+              >Automatic model selection · Local only</span
+            ><button id="stop" class="subtle" type="button" hidden>Stop</button
+            ><button id="send" class="primary" type="submit">Send ↗</button>
+          </div>
+        </form>
+        <p id="engine-status" class="footnote" role="status">
+          Checking your local models…
+        </p>
+      </footer>
+    </main>
+    <dialog id="file-preview" aria-labelledby="preview-title">
+      <header class="topbar">
+        <h2 id="preview-title">File preview</h2>
+        <button id="preview-close" type="button">Close</button>
+      </header>
+      <p id="preview-detail"></p>
+      <div id="preview-content"></div>
+      <button id="preview-download" type="button">Download original</button>
+    </dialog>
+    <section
+      id="command-palette"
+      class="palette"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="palette-title"
+    >
+      <div class="palette-backdrop" data-palette-close></div>
+      <div class="palette-panel">
+        <div class="palette-head">
+          <h2 id="palette-title">Quick actions</h2>
+          <button type="button" data-palette-close>Esc</button>
+        </div>
+        <input
+          id="palette-search"
+          type="search"
+          placeholder="Search actions…"
+        />
+        <div id="palette-list"></div>
       </div>
-      <div id="creations"></div>
     </section>
-
-    <details id="project-panel"><summary><span>Project files</span><small>Upload context and review edits</small></summary>
-      <p>Upload UTF-8 code or text files (60 KB each). Select up to 12 files as context. Originals stay unchanged.</p>
-      <div class="controls"><label>Upload files<input id="upload-files" type="file" multiple></label><label>Upload folder<input id="upload-folder" type="file" webkitdirectory multiple></label></div>
-      <div id="project-files"></div><label><input id="edit-project" type="checkbox"> In Code mode, propose file changes for review</label>
-      <p>Use a coding model. Review changes, apply them, then download edited files.</p>
-      <div class="controls"><input id="change-id" aria-label="Saved change ID" placeholder="Paste a saved change ID"><button id="open-change" type="button">Open saved change</button></div>
-      <section id="change-review" hidden><p id="change-status" role="status"></p><div id="change-diff"></div><button id="apply-change" class="primary" type="button">Accept all changes</button><button id="undo-change" type="button">Undo changes</button><button id="undo-last-edit" type="button">Undo last agent edit</button></section>
-    </details>
-
-    <div id="notice" class="notice" role="alert" hidden></div>
-    <section id="progress" class="progress" hidden aria-live="polite"></section>
-    <section id="file-ingestion" class="file-ingestion" aria-label="Uploaded files" hidden>
-      <div id="file-chips" class="file-chips"></div>
-    </section>
-    <section id="messages" aria-label="Messages" aria-live="polite"><div class="welcome"><div class="spark">✦</div><p class="eyebrow">PRIVATE, LOCAL, YOURS</p><h2>What’s on your mind?</h2><p>Ask a question, shape an idea, or open Tasks to get work done.<br>Local inference · No account or credits required.</p><div class="suggestions"><button data-prompt="Explain a difficult concept using a simple example." type="button"><span>UNDERSTAND</span>Make something complex feel simple <b>↗</b></button><button data-prompt="Help me break my project into a practical step-by-step plan." type="button"><span>CREATE</span>Turn an idea into a clear plan <b>↗</b></button><button data-prompt="Help me debug my code. Ask me for the code and the error first." type="button"><span>BUILD</span>Work through a coding problem <b>↗</b></button></div></div></section>
-    <button id="scroll-bottom" class="scroll-bottom" type="button" hidden>↓ Newest message</button>
-    <footer><form id="composer"><div id="upload-chips" class="file-chips"></div><label class="sr-only" for="prompt">Message MyAi</label><input id="global-file-input" type="file" multiple hidden accept=".png,.jpg,.jpeg,.webp,.gif,.py,.js,.ts,.html,.css,.json,.md,.pdf,.txt,.csv"><textarea id="prompt" name="prompt" list="file-suggestions" rows="2" maxlength="16000" placeholder="Ask anything. Keep it yours." required></textarea><datalist id="file-suggestions"></datalist><div class="composer-bottom"><button id="attach-file" type="button" class="icon-button" aria-label="Attach file" title="Attach file">📎</button><span id="composer-hint">Load a model to begin · Shift+Enter for a new line</span><button type="button" id="stop" class="subtle" hidden>Stop</button><button id="send" class="primary" type="submit" disabled>Send <span aria-hidden="true">↗</span></button></div></form><p class="footnote">Local AI can make mistakes. Check important answers.</p></footer>
-  </main>
-
-  <section id="command-palette" class="palette" hidden role="dialog" aria-modal="true" aria-labelledby="palette-title">
-    <div class="palette-backdrop" data-palette-close></div>
-    <div class="palette-panel"><div class="palette-head"><div><span class="eyebrow">QUICK ACTIONS</span><h2 id="palette-title">Command palette</h2></div><button type="button" class="subtle" data-palette-close>Esc</button></div><input id="palette-search" type="search" placeholder="Search commands…" autocomplete="off"><div id="palette-list" role="listbox"></div></div>
-  </section>
-  <div id="global-drop-overlay" class="global-drop-overlay" hidden><div class="global-drop-card"><strong>Drop to upload</strong><span id="drop-context">Images for Studio</span></div></div>
-  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
-</body>
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
+  </body>
 </html>

@@ -55,6 +55,14 @@ class TaskTests(unittest.TestCase):
                 return record
             time.sleep(.02)
         self.fail('Task did not finish')
+    def test_claimed_edit_without_diff_requires_real_work(self):
+        m = self.manager(['{"final":"I updated the file."}', action('read_file', path='math.py'), action('write_file', path='math.py', content='answer = 3\n'), '{"final":"Updated the file."}'])
+        record = self.wait(m, m.start({'goal': 'Update the file', 'project_path': str(self.source)})['id'])
+        self.assertEqual(record['status'], 'review_ready')
+        self.assertEqual(record['review']['files'][0]['after'], 'answer = 3\n')
+        self.assertEqual((self.source / 'math.py').read_text(), 'answer = 1\n')
+        self.assertTrue(any('No files have changed' in str(message) for turn in m.app.engine.seen for message in turn))
+
     def test_project_write_verify_review_apply_and_undo(self):
         m = self.manager([action('read_file', path='math.py'), action('write_file', path='math.py', content='answer = 2\n'), action('write_file', path='new.txt', content='new output\n'), '{"final":"Updated files."}'])
         r = m.start({'goal': 'update', 'project_path': str(self.source), 'allow_commands': True,

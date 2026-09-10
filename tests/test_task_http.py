@@ -38,6 +38,26 @@ class TaskHTTPTests(unittest.TestCase):
         self.assertFalse(state['account_required']);self.assertFalse(state['paid_provider_required'])
         self.assertEqual(self.req('/css/base.css',auth=False)[0],200)
         self.assertEqual(self.req('/js/tasks.js',auth=False)[0],200)
+    def test_unified_route_is_authenticated_and_uses_local_catalog(self):
+        self.assertEqual(self.req('/api/route', {'prompt': 'Hello'}, auth=False)[0], 401)
+        code, body = self.req('/api/route', {'prompt': 'Write a Python function'})
+        self.assertEqual(code, 200)
+        plan = json.loads(body)
+        self.assertEqual(plan['kind'], 'code')
+        self.assertEqual(plan['model'], 'test.gguf')
+        self.assertIsNone(self.engine.seen)
+        self.assertEqual(self.req('/api/route', {'prompt': ''})[0], 400)
+
+    def test_unified_shell_preserves_kiss_brand_and_single_upload(self):
+        html = self.req('/', auth=False)[1].decode()
+        self.assertIn('alt="KISS"', html)
+        self.assertIn('src="/logo.svg"', html)
+        self.assertEqual(html.count('id="global-file-input"'), 1)
+        self.assertNotIn('data-workspace=', html)
+        self.assertNotIn('id="upload-folder"', html)
+        self.assertNotIn('id="media-prompt"', html)
+        self.assertNotIn('id="task-goal"', html)
+
     def test_preferences_and_docs_context(self):
         self.assertEqual(self.req('/api/preferences',{'instructions':'Be concise.','max_output_tokens':4096})[0],200)
         self.assertEqual(json.loads(self.req('/api/preferences')[1])['instructions'],'Be concise.')

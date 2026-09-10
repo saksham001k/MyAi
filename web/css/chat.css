@@ -10,7 +10,7 @@
 .suggestions b { float: right; color: var(--muted); }
 .message { max-width: 900px; margin-bottom: 20px; }
 .message .role { display: flex; align-items: center; gap: 8px; color: var(--muted); }
-.message .role::before { content: "M"; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font-size: 11px; }
+.message .role::before { content: "K"; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font-size: 11px; }
 .message.user .role::before { content: "Y"; background: rgba(56, 217, 194, .13); color: var(--code); }
 .message.user { border: 1px solid rgba(56, 217, 194, .15); background: rgba(56, 217, 194, .06); }
 .message.assistant { padding: 15px 18px; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(255, 255, 255, .02); }

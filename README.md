@@ -1,8 +1,8 @@
-# MyAi
+# KISS
 
 **Your local model. Your projects. No mandatory AI account or credits.**
 
-MyAi is a local-first personal assistant by Saksham Katiyar. The **0.3 local beta** adds persistent project/research tasks, reviewed file changes with undo, test verification, basic text/PDF understanding and local response preferences to the existing chat and Studio application.
+KISS is a local-first personal assistant by Saksham Katiyar. The **unified local beta** uses one composer with automatic selection among installed models. It includes persistent project/research tasks, reviewed file changes with undo, test verification, basic text/PDF understanding and local response preferences to the existing chat and Studio application.
 
 It runs compatible GGUF models through its own llama.cpp process. The web app does not require an OpenAI account, API key, paid AI service or Ollama. Internet is needed for initial downloads and web research. A local model's quality and speed depend on your machine; no unlimited capability or commercial-agent parity is claimed.
 

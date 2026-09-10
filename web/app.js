@@ -1,370 +1,553 @@
 "use strict";
-const $ = id => document.getElementById(id);
-const token = new URLSearchParams(location.hash.slice(1)).get("token") || sessionStorage.getItem("myai-token");
+const $ = (id) => document.getElementById(id);
+const token =
+  new URLSearchParams(location.hash.slice(1)).get("token") ||
+  sessionStorage.getItem("myai-token");
 if (token) sessionStorage.setItem("myai-token", token);
 history.replaceState(null, "", "/");
-let active = null, chats = [], busy = false, running = false;
+let active = null,
+  chats = [],
+  busy = false,
+  operation = null,
+  mediaTimer = null,
+  view = 0;
 const welcome = $("messages").innerHTML;
-const progressManager = new ProgressManager($("progress"));
-
-function notice(message = "") {
-  $("notice").textContent = message;
-  $("notice").hidden = !message;
-  if (message) window.showToast?.(message, "error");
+function notice(value = "") {
+  $("notice").textContent = value;
+  $("notice").hidden = !value;
 }
 async function api(path, method = "GET", body) {
-  const response = await fetch(path, {method, headers: {"Authorization": `Bearer ${token || ""}`, "Content-Type": "application/json"}, body: body === undefined ? undefined : JSON.stringify(body)});
-  if (!response.ok) { const result = await response.json(); throw new Error(result.error || "Request failed"); }
-  return response;
+  const r = await fetch(path, {
+    method,
+    headers: {
+      Authorization: "Bearer " + (token || ""),
+      "Content-Type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const e = await r.json();
+    throw new Error(e.error || "Request failed");
+  }
+  return r;
 }
 function setBusy(value) {
   busy = value;
-  for (const id of ["load", "quick-load", "unload", "new-chat", "model", "context", "gpu", "export"]) $(id).disabled = value;
-  $("send").disabled = value || !running;
-  $("prompt").disabled = value;
+  for (const id of ["send", "new-chat", "unload", "context", "gpu"])
+    $(id).disabled = value;
+  $("stop").hidden = !value || operation === "loading";
+}
+function renderContent(target, value) {
+  target.replaceChildren();
+  value.split(/```[^\n]*\n([\s\S]*?)```/g).forEach((part, i) => {
+    if (i % 2) {
+      const p = document.createElement("pre");
+      p.textContent = part;
+      target.append(p);
+    } else
+      part.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).forEach((piece) => {
+        if (piece.startsWith("**")) {
+          const strong = document.createElement("strong");
+          strong.textContent = piece.slice(2, -2);
+          target.append(strong);
+        } else if (piece.startsWith("`")) {
+          const code = document.createElement("code");
+          code.textContent = piece.slice(1, -1);
+          target.append(code);
+        } else target.append(document.createTextNode(piece));
+      });
+  });
+}
+function message(role, content) {
+  const row = document.createElement("article");
+  row.className = "message " + role;
+  const label = document.createElement("div");
+  label.className = "role";
+  label.textContent = role === "user" ? "YOU" : "KISS";
+  const text = document.createElement("div");
+  text.className = "content";
+  renderContent(text, content);
+  row.append(label, text);
+  if (role !== "user") {
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "copy";
+    copy.textContent = "Copy";
+    copy.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(text.textContent);
+        copy.textContent = "Copied";
+      } catch {
+        notice("Select the response text to copy it.");
+      }
+    };
+    row.append(copy);
+  }
+  $("messages").append(row);
+  return text;
+}
+function scrollMessages() {
+  $("messages").scrollTop = $("messages").scrollHeight;
+}
+function leaveView() {
+  view++;
+  clearTimeout(mediaTimer);
+  window.leaveTask?.();
+}
+function bindSuggestions() {
+  document.querySelectorAll("[data-prompt]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        $("prompt").value = b.dataset.prompt;
+        $("prompt").focus();
+      }),
+  );
+}
+function newChat() {
+  if (busy) return;
+  leaveView();
+  active = null;
+  sessionStorage.removeItem("kiss-active-chat");
+  window.setAttachmentScope?.("draft", true);
+  $("messages").innerHTML = welcome;
+  $("chat-title").textContent = "What would you like to do?";
+  notice();
+  bindSuggestions();
+  renderHistory();
+}
+async function openChat(id) {
+  if (busy) return;
+  leaveView();
+  const chat = await (await api("/api/chats/" + id)).json();
+  active = id;
+  sessionStorage.setItem("kiss-active-chat", id);
+  window.setAttachmentScope?.(id);
+  $("chat-title").textContent = chat.title;
+  $("messages").replaceChildren();
+  for (const m of chat.messages) message(m.role, m.content);
+  renderHistory();
+  scrollMessages();
+}
+async function listChats() {
+  chats = await (await api("/api/chats")).json();
+  renderHistory();
+}
+function renderHistory() {
+  $("history").replaceChildren();
+  const q = $("search").value.toLowerCase();
+  for (const chat of chats.filter((c) => c.title.toLowerCase().includes(q))) {
+    const row = document.createElement("div");
+    row.className = "chat-row" + (active === chat.id ? " active" : "");
+    const b = document.createElement("button");
+    b.textContent = chat.title;
+    b.title = chat.title;
+    b.onclick = () => openChat(chat.id).catch((e) => notice(e.message));
+    row.append(b);
+    $("history").append(row);
+  }
+  for (const b of document.querySelectorAll(
+    "#task-list button,#media-list button",
+  ))
+    b.hidden = !b.textContent.toLowerCase().includes(q);
 }
 async function refresh() {
   const state = await (await api("/api/status")).json();
-  running = state.running;
-  $("quick-load").hidden = running;
-  $("quick-load").disabled = busy || state.busy || !state.models.length;
-  const selected = $("model").value;
-  $("model").replaceChildren();
-  for (const model of state.models) {
-    const option = new Option(`${model.name} · ${(model.bytes / 1024 ** 3).toFixed(1)} GB`, model.name);
-    $("model").add(option);
+  $("engine-status").textContent = state.running
+    ? "● Local · " + state.model
+    : "○ " +
+      state.models.length +
+      " local model(s) · Loads automatically when you send";
+  $("setup-hint").textContent =
+    state.models.map((m) => m.name).join(" · ") ||
+    "No local GGUF models found in models/.";
+  if (!busy && state.busy) {
+    operation = "external";
+    setBusy(true);
   }
-  if (!state.models.length) $("model").add(new Option("No GGUF models found", ""));
-  if (state.models.some(m => m.name === selected)) $("model").value = selected;
-  if (state.model) $("model").value = state.model;
-  $("engine-status").textContent = running ? `● Ready · ${state.model}` : "○ No model loaded · local workspace";
-  if (state.hardware) {
-    const labels = {metal: "⚡ Apple Silicon Metal", cuda: "🟢 CUDA", vulkan: "◆ Vulkan", cpu: "○ CPU"};
-    const vram = state.hardware.vram_mb ? ` · ${Math.round(state.hardware.vram_mb / 1024)} GB VRAM` : "";
-    $("hardware-badge").textContent = `${labels[state.hardware.backend] || state.hardware.backend}${vram}`;
-  }
-  $("setup-hint").textContent = !state.runtime_found ? `Setup: put llama-server and its companion libraries in runtime/${state.platform}/. See docs/SETUP.md.` : !state.models.length ? "Add a compatible .gguf file to the models folder, then reload this page." : "Choose Automatic acceleration and Load model. Local inference needs no login, API key or credits. Larger context uses more memory.";
-  $("composer-hint").textContent = running ? "Local only · Enter to send · Shift+Enter for a new line" : "Load a model to begin · Shift+Enter for a new line";
-  $("send").disabled = busy || !running;
+  return state;
 }
-async function listChats() { chats = await (await api("/api/chats")).json(); renderHistory(); }
-function renderHistory() {
-  $("history").replaceChildren();
-  for (const chat of chats.filter(c => c.title.toLowerCase().includes($("search").value.toLowerCase()))) {
-    const row = document.createElement("div"); row.className = `chat-row ${active === chat.id ? "active" : ""}`;
-    const button = document.createElement("button"); button.textContent = chat.title; button.title = chat.title;
-    button.onclick = () => { if (!busy) openChat(chat.id).catch(e => notice(e.message)); };
-    const remove = document.createElement("button"); remove.textContent = "×"; remove.className = "delete"; remove.setAttribute("aria-label", `Delete ${chat.title}`);
-    remove.onclick = async () => {
-      if (busy || !(await (window.confirmToast?.("Delete this conversation? This cannot be undone.") ?? Promise.resolve(false)))) return;
-      try { await api(`/api/chats/${chat.id}`, "DELETE"); if (active === chat.id) newChat(); await listChats(); } catch(e) { notice(e.message); }
+window.refreshMyAi = () => refresh().catch((e) => notice(e.message));
+async function ensureModel(route) {
+  const state = await refresh();
+  if (state.busy)
+    throw new Error(
+      "Another operation is running. Wait for it to finish or stop it first.",
+    );
+  if (!state.running || state.model !== route.model) {
+    operation = "loading";
+    setBusy(true);
+    $("composer-hint").textContent = "Loading " + route.model + "…";
+    await api("/api/engine/start", "POST", {
+      model: route.model,
+      context: Number($("context").value),
+      gpu_layers: $("gpu").value === "auto" ? null : 0,
+    });
+  }
+  await refresh();
+  $("composer-hint").textContent = route.reason + " · " + route.model;
+}
+async function chatReply(prompt, route) {
+  operation = "chat";
+  setBusy(true);
+  if (!active) {
+    const c = await (await api("/api/chats", "POST", {})).json();
+    active = c.id;
+    sessionStorage.setItem("kiss-active-chat", active);
+    window.setAttachmentScope?.(active, false, true);
+    $("messages").replaceChildren();
+  }
+  message("user", prompt);
+  const text = message("assistant", "");
+  $("prompt").value = "";
+  const r = await api("/api/generate", "POST", {
+    chat_id: active,
+    prompt,
+    mode: route.kind === "code" ? "code" : "chat",
+    uploads: window.uploadedFiles?.() || [],
+  });
+  const reader = r.body.getReader(),
+    decoder = new TextDecoder();
+  let pending = "",
+    answer = "",
+    complete = false;
+  while (true) {
+    const { done, value } = await reader.read();
+    pending += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const lines = pending.split("\n");
+    pending = lines.pop();
+    for (const line of lines) {
+      if (!line) continue;
+      const item = JSON.parse(line);
+      if (item.token) {
+        answer += item.token;
+        text.textContent = answer;
+        scrollMessages();
+      }
+      if (item.error) throw new Error(item.error);
+      if (item.done) complete = true;
+    }
+    if (done) break;
+  }
+  renderContent(text, answer);
+  if (!complete)
+    throw new Error(
+      "Connection ended. Reopen the saved conversation before retrying.",
+    );
+  await listChats();
+  const c = chats.find((c) => c.id === active);
+  if (c) $("chat-title").textContent = c.title;
+}
+$("composer").onsubmit = async (e) => {
+  e.preventDefault();
+  const prompt = $("prompt").value.trim();
+  if (!prompt || busy) return;
+  if (window.uploadsPending()) {
+    notice("Wait for your attachments to finish uploading.");
+    return;
+  }
+  notice();
+  operation = "routing";
+  setBusy(true);
+  try {
+    const route = await (
+      await api("/api/route", "POST", {
+        prompt,
+        project_path: $("task-project").value.trim(),
+        has_image: window
+          .uploadedFiles()
+          .some((f) => /\.(png|jpe?g|webp)$/i.test(f.filename)),
+      })
+    ).json();
+    $("composer-hint").textContent =
+      route.reason + (route.model ? " · " + route.model : "");
+    if (!route.ready) {
+      if (route.needs_project) {
+        $("project-access").open = true;
+        $("task-project").focus();
+      }
+      throw new Error(route.message);
+    }
+    if (route.kind === "image" || route.kind === "video") {
+      if (route.kind === "video" && !$("video-confirm").checked) {
+        $("settings").hidden = false;
+        $("settings-toggle").setAttribute("aria-expanded", "true");
+        throw new Error(
+          "Enable experimental video in Settings to run this request.",
+        );
+      }
+      await startMedia(prompt, route);
+      return;
+    }
+    await ensureModel(route);
+    if (route.kind === "project" || route.kind === "research") {
+      leaveView();
+      active = null;
+      operation = "task";
+      setBusy(true);
+      $("project-access").open = false;
+      await window.startUnifiedTask({
+        goal: prompt,
+        kind: route.kind,
+        project_path: $("task-project").value.trim(),
+        allow_commands: $("task-allow-commands").checked,
+        test_command: $("task-allow-commands").checked
+          ? $("task-test").value
+          : "",
+        max_steps: Number($("task-steps").value),
+        uploads: window.uploadedFiles(),
+      });
+      $("prompt").value = "";
+      return;
+    }
+    leaveView();
+    await chatReply(prompt, route);
+  } catch (e) {
+    notice(e.message);
+  } finally {
+    if (operation !== "task" && operation !== "media") {
+      operation = null;
+      setBusy(false);
+      await refresh().catch((e) => notice(e.message));
+    }
+  }
+};
+$("prompt").onkeydown = (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    if (!busy) $("composer").requestSubmit();
+  }
+};
+$("stop").onclick = async () => {
+  try {
+    if (operation === "task") await window.stopUnifiedTask();
+    else if (operation === "media") await api("/api/media/cancel", "POST", {});
+    else await api("/api/cancel", "POST", {});
+    $("stop").textContent = "Stopping…";
+  } catch (e) {
+    notice(e.message);
+  }
+};
+window.taskViewStarted = () => {
+  operation = "task";
+  setBusy(true);
+};
+window.taskViewFinished = () => {
+  if (operation === "task" || operation === "external") {
+    operation = null;
+    setBusy(false);
+    $("stop").textContent = "Stop";
+    refresh().catch((e) => notice(e.message));
+  }
+};
+window.prepareTaskView = () => {
+  if (busy && operation !== "task" && operation !== "external") return false;
+  clearTimeout(mediaTimer);
+  active = null;
+  sessionStorage.removeItem("kiss-active-chat");
+  $("messages").replaceChildren();
+  $("chat-title").textContent = "Your work";
+  renderHistory();
+  return true;
+};
+async function mediaList() {
+  const state = await (await api("/api/media")).json();
+  $("media-list").replaceChildren();
+  for (const j of state.jobs) {
+    const b = document.createElement("button");
+    b.textContent = j.prompt.slice(0, 65);
+    const s = document.createElement("small");
+    s.textContent = j.kind + " · " + j.status;
+    b.append(s);
+    b.onclick = () => {
+      if (!busy) {
+        leaveView();
+        active = null;
+        showMedia(j.id, view).catch((e) => notice(e.message));
+      }
     };
-    row.append(button, remove); $("history").append(row);
+    $("media-list").append(b);
+  }
+  const running = state.jobs.find((j) => j.status === "running");
+  if (running && (!busy || operation === "external")) {
+    leaveView();
+    operation = "media";
+    setBusy(true);
+    await showMedia(running.id, view);
+  }
+  return state;
+}
+async function startMedia(prompt, route) {
+  const payload = {
+    preset: route.preset,
+    prompt,
+    steps: 20,
+    seed: Math.floor(Math.random() * 2147483647),
+    experimental: $("video-confirm").checked,
+  };
+  if (route.image_edit) {
+    const f = window
+      .uploadedFiles()
+      .find((f) => /\.(png|jpe?g|webp)$/i.test(f.filename));
+    const blob = await (await api("/api/uploads/" + f.id)).blob();
+    payload.image = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    payload.strength = 0.65;
+  }
+  const j = await (
+    await api(
+      route.image_edit ? "/api/studio/img2img" : "/api/media/start",
+      "POST",
+      payload,
+    )
+  ).json();
+  leaveView();
+  active = null;
+  operation = "media";
+  setBusy(true);
+  $("prompt").value = "";
+  await showMedia(j.id, view);
+  await mediaList();
+}
+async function showMedia(id, generation) {
+  const state = await (await api("/api/media")).json();
+  if (generation !== view) return;
+  const j = state.jobs.find((j) => j.id === id);
+  if (!j) throw new Error("Creation not found.");
+  $("chat-title").textContent = "Your creation";
+  $("messages").replaceChildren();
+  message("user", j.prompt);
+  const answer = message(
+    "assistant",
+    j.status === "running"
+      ? "Creating locally… " + (j.progress?.stage || "")
+      : j.error || "Creation " + j.status,
+  );
+  if (j.status === "complete") {
+    const blob = await (await api("/api/media/result/" + id)).blob();
+    if (generation !== view) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "KISS-" + id + (j.kind === "image" ? ".png" : ".avi");
+    a.textContent = "Download " + j.kind;
+    answer.append(document.createElement("br"), a);
+    if (j.kind === "image") {
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = j.prompt;
+      img.className = "result-image";
+      answer.append(img);
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 300000);
+  }
+  if (j.status === "running") {
+    operation = "media";
+    setBusy(true);
+    mediaTimer = setTimeout(
+      () =>
+        showMedia(id, generation).catch((e) => {
+          notice(e.message);
+          operation = null;
+          setBusy(false);
+        }),
+      2500,
+    );
+  } else {
+    operation = null;
+    setBusy(false);
+    refresh().catch((e) => notice(e.message));
   }
 }
-function message(role, content, status = "complete") {
-  const article = document.createElement("article"); article.className = `message ${role}`;
-  const label = document.createElement("div"); label.className = "role"; label.textContent = role === "user" ? "YOU" : "MYAI";
-  const text = document.createElement("div"); text.className = "content"; renderContent(text, content);
-  article.append(label, text);
-  if (status !== "complete") { const hint = document.createElement("small"); hint.textContent = `Response ${status}`; article.append(hint); }
-  const copy = document.createElement("button"); copy.className = "copy"; copy.textContent = "Copy";
-  copy.onclick = async () => { try { await navigator.clipboard.writeText(text.textContent); copy.textContent = "Copied"; } catch { notice("Select the response text to copy it."); } };
-  article.append(copy); $("messages").append(article); return text;
-}
-async function openChat(id) {
-  const chat = await (await api(`/api/chats/${id}`)).json(); active = id;
-  $("chat-title").textContent = chat.title; $("messages").replaceChildren();
-  for (const m of chat.messages) message(m.role, m.content, m.status);
-  renderHistory(); scrollMessages();
-}
-function newChat() { active = null; $("chat-title").textContent = "What would you like to get done?"; $("messages").innerHTML = welcome; renderHistory(); bindSuggestions(); notice(); }
-function scrollMessages() { $("messages").scrollTop = $("messages").scrollHeight; }
-function bindSuggestions() { document.querySelectorAll("[data-prompt]").forEach(button => button.onclick = () => { $("prompt").value = button.dataset.prompt; $("prompt").focus(); }); }
 $("search").oninput = renderHistory;
 $("new-chat").onclick = newChat;
 $("sidebar-toggle").onclick = () => {
-  const collapsed = document.body.classList.toggle("sidebar-collapsed");
-  $("sidebar-toggle").setAttribute("aria-expanded", String(!collapsed));
-  $("sidebar-toggle").setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+  const v = document.body.classList.toggle("sidebar-collapsed");
+  $("sidebar-toggle").setAttribute("aria-expanded", String(!v));
 };
-$("messages").addEventListener("scroll", () => {
-  const distance = $("messages").scrollHeight - $("messages").scrollTop - $("messages").clientHeight;
-  $("scroll-bottom").hidden = distance < 120;
-});
-$("scroll-bottom").onclick = () => { scrollMessages(); $("scroll-bottom").hidden = true; };
-$("settings-toggle").onclick = () => { $("settings").hidden = !$("settings").hidden; $("settings-toggle").setAttribute("aria-expanded", String(!$("settings").hidden)); };
-$("load").onclick = async () => {
-  notice(); setBusy(true); $("engine-status").textContent = "Loading model… larger models may take a few minutes.";
-  try { await api("/api/engine/start", "POST", {model: $("model").value, context: Number($("context").value), gpu_layers: $("gpu").value === "auto" ? null : Number($("gpu").value)}); }
-  catch(e) { notice(e.message); }
-  finally { setBusy(false); await refresh().catch(e => notice(e.message)); }
+$("settings-toggle").onclick = () => {
+  $("settings").hidden = !$("settings").hidden;
+  $("settings-toggle").setAttribute(
+    "aria-expanded",
+    String(!$("settings").hidden),
+  );
 };
-$("unload").onclick = async () => { setBusy(true); try { await api("/api/engine/stop", "POST", {}); await refresh(); } catch(e) { notice(e.message); } finally { setBusy(false); } };
-$("stop").onclick = async () => { try { await api("/api/cancel", "POST", {}); $("stop").textContent = "Stopping…"; $("stop").disabled = true; } catch(e) { notice(e.message); } };
-$("prompt").onkeydown = event => { if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!busy && running) $("composer").requestSubmit(); } };
-$("composer").onsubmit = async event => {
-  event.preventDefault(); const prompt = $("prompt").value.trim(); if (!prompt || busy || !running) return;
-  notice(); setBusy(true); let responseText = null, complete = false;
+$("task-allow-commands").onchange = () => {
+  $("task-test").disabled = !$("task-allow-commands").checked;
+};
+$("task-project").value = sessionStorage.getItem("myai-project") || "";
+$("task-project").oninput = () => {
+  sessionStorage.setItem("myai-project", $("task-project").value);
+  $("project-selected").textContent = $("task-project").value.trim()
+    ? "· " + $("task-project").value.trim().split("/").filter(Boolean).pop()
+    : "";
+};
+$("task-project").oninput();
+$("unload").onclick = async () => {
   try {
-    if (!active) { const chat = await (await api("/api/chats", "POST", {})).json(); active = chat.id; $("messages").replaceChildren(); }
-    message("user", prompt); responseText = message("assistant", ""); $("prompt").value = "";
-    progressManager.start(workspaceMode === "code" ? "code" : workspaceMode === "agent" ? "agent" : "chat");
-    $("stop").hidden = false; $("stop").disabled = false; $("stop").textContent = "Stop response";
-    const agentMode = workspaceMode === "agent";
-    const response = await api(agentMode ? "/api/agent/stream" : "/api/generate", "POST", {chat_id: active, prompt, mode: workspaceMode === "code" && $("edit-project").checked ? "edit" : workspaceMode, files: [...selectedFiles], uploads: window.uploadedFiles?.() || [], auto_approve: agentMode && $("auto-approve").checked});
-    const reader = response.body.getReader(), decoder = new TextDecoder(); let pending = "";
-    while (true) {
-      const {done, value} = await reader.read();
-      pending += decoder.decode(value || new Uint8Array(), {stream: !done});
-      const records = agentMode ? pending.split("\n\n") : pending.split("\n");
-      pending = records.pop();
-      for (const record of records) {
-        const line = agentMode ? record.split("\n").find(line => line.startsWith("data: "))?.slice(6) : record;
-        if (!line) continue; const item = JSON.parse(line);
-        if (item.type === "progress") progressManager.update(item);
-        if (item.token) { responseText.textContent += item.token; scrollMessages(); }
-        if (item.type === "action" || item.type === "observation" || item.type === "error") {
-          addAgentEvent(item);
-          progressManager.addStep(item);
-        }
-        if (item.confirmation) {
-          const approved = await (window.confirmToast?.(`Allow sensitive command?\n${JSON.stringify(item.confirmation.arguments.command)}`) ?? Promise.resolve(false));
-          await api("/api/agent/confirm", "POST", {approved});
-        }
-        if (item.type === "final" && item.content) { responseText.textContent += item.content; scrollMessages(); }
-        if (item.proposal) showProposal(item.proposal);
-        if (item.error) notice(item.error);
-        if (item.done) complete = true;
-      }
-      if (done) break;
-    }
-    if (!complete) throw new Error("Connection ended before completion. Check the saved conversation before retrying.");
-    await openChat(active);
-  } catch(e) { notice(e.message); if (responseText && !responseText.textContent) responseText.textContent = "Response unavailable. Your message may already be saved; reopen this conversation before retrying."; }
-  finally { progressManager.finish(); $("stop").hidden = true; setBusy(false); await listChats().catch(e => notice(e.message)); $("prompt").focus(); }
+    await api("/api/engine/stop", "POST", {});
+    await refresh();
+  } catch (e) {
+    notice(e.message);
+  }
 };
+$("save-preferences").onclick = async () => {
+  try {
+    await api("/api/preferences", "POST", {
+      instructions: $("personal-instructions").value,
+      max_output_tokens: Number($("output-tokens").value),
+    });
+    sessionStorage.setItem("myai-context", $("context").value);
+    window.showToast?.("Preferences saved locally.", "success");
+  } catch (e) {
+    notice(e.message);
+  }
+};
+$("context").value = sessionStorage.getItem("myai-context") || "8192";
 $("export").onclick = async () => {
-  if (!active) return notice("Open a conversation to export it.");
-  try { const chat = await (await api(`/api/chats/${active}`)).json(); const text = `# ${chat.title}\n\n` + chat.messages.map(m => `## ${m.role === "user" ? "You" : "KISS"}${m.status !== "complete" ? ` (${m.status})` : ""}\n\n${m.content}`).join("\n\n"); const url = URL.createObjectURL(new Blob([text], {type: "text/markdown"})); const a = document.createElement("a"); a.href = url; a.download = `KISS-${active.slice(0,8)}.md`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); } catch(e) { notice(e.message); }
+  if (!active)
+    return notice(
+      "Open a conversation to export it. Work reports have their own Download report button.",
+    );
+  try {
+    const c = await (await api("/api/chats/" + active)).json();
+    const u = URL.createObjectURL(
+      new Blob(
+        [
+          "# " +
+            c.title +
+            "\n\n" +
+            c.messages
+              .map((m) => "## " + m.role + "\n\n" + m.content)
+              .join("\n\n"),
+        ],
+        { type: "text/markdown" },
+      ),
+    );
+    const a = document.createElement("a");
+    a.href = u;
+    a.download = "KISS-conversation.md";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(u), 1000);
+  } catch (e) {
+    notice(e.message);
+  }
 };
 bindSuggestions();
-Promise.all([refresh(), listChats()]).catch(e => notice(e.message));
-
-let workspaceMode = "chat", mediaKind = "image", mediaPoll = null;
-let studioWorkflow = "text", sourceImageData = "";
-const mediaURLs = [];
-function clearMediaURLs() { for (const url of mediaURLs.splice(0)) URL.revokeObjectURL(url); }
-document.querySelectorAll("[data-workspace]").forEach(button => button.onclick = async () => {
-  if (busy) return notice("Wait for the active operation to finish.");
-  const mode = button.dataset.workspace; const taskMode = mode === "agent"; const studio = mode === "image" || mode === "video";
-  document.querySelectorAll("[data-workspace]").forEach(b => b.classList.toggle("primary", b === button));
-  document.body.dataset.mode = mode === "image" || mode === "video" ? "studio" : mode;
-  $("task-panel").hidden = !taskMode;
-  $("docs-note").hidden = mode !== "docs";
-  $("studio").hidden = !studio; $("messages").hidden = studio || taskMode; $("project-panel").hidden = studio || taskMode; document.querySelector("footer").hidden = studio || taskMode;
-  if (taskMode) window.showTasks?.();
-  document.querySelector(".engine-bar").hidden = studio; $("settings").hidden = true; $("settings-toggle").setAttribute("aria-expanded", "false");
-  if (studio) { mediaKind = mode; $("video-opt-in").hidden = mode !== "video"; await refreshMedia().catch(e => notice(e.message)); }
-  else { workspaceMode = mode; $("prompt").placeholder = mode === "code" ? "Paste code, describe a bug, or ask for an implementation…" : "Ask anything. Keep it yours."; await refresh().catch(e => notice(e.message)); }
-});
-function setStudioWorkflow(workflow) {
-  studioWorkflow = workflow;
-  $("img2img-panel").hidden = workflow !== "img2img";
-  $("text-to-image").classList.toggle("active", workflow === "text");
-  $("image-to-image").classList.toggle("active", workflow === "img2img");
-  $("text-to-image").setAttribute("aria-selected", String(workflow === "text"));
-  $("image-to-image").setAttribute("aria-selected", String(workflow === "img2img"));
-  $("media-prompt").placeholder = workflow === "img2img" ? "Describe what changes to make to this image…" : "Describe the scene, subject, or atmosphere…";
-}
-function showSourceImage(file) {
-  if (!file || !["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 20 * 1024 * 1024) {
-    return notice("Choose a PNG, JPG, JPEG, or WebP image up to 20 MB.");
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
-    sourceImageData = reader.result;
-    const image = new Image();
-    image.onload = () => {
-      $("image-preview").replaceChildren(image);
-      $("image-meta").hidden = false;
-      $("image-meta").textContent = `${file.name} · ${image.naturalWidth} × ${image.naturalHeight} · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
-      $("image-clear").hidden = false;
-    };
-    image.src = sourceImageData;
-  };
-  reader.readAsDataURL(file);
-}
-window.showSourceImage = showSourceImage;
-function clearSourceImage() {
-  sourceImageData = "";
-  $("image-file").value = "";
-  $("image-meta").hidden = true;
-  $("image-clear").hidden = true;
-  $("image-preview").innerHTML = "<span>Drop a PNG, JPG, JPEG, or WebP here</span><small>Up to 20 MB · click to browse</small>";
-}
-window.clearSourceImage = clearSourceImage;
-$("text-to-image").onclick = () => setStudioWorkflow("text");
-$("image-to-image").onclick = () => setStudioWorkflow("img2img");
-$("image-clear").onclick = clearSourceImage;
-$("image-dropzone").onclick = event => { if (event.target !== $("image-clear")) $("image-file").click(); };
-$("image-strength").oninput = event => {
-  const value = Number(event.target.value);
-  const label = value < 0.5 ? "Subtle tweak / touch-up" : value < 0.85 ? "Balanced transformation (Recommended)" : "Major creative overhaul";
-  $("strength-value").textContent = `${value.toFixed(2)} · ${label}`;
-};
-async function refreshMedia() {
-  const state = await (await api("/api/media")).json();
-  const selected = $("media-preset").value; $("media-preset").replaceChildren();
-  for (const p of state.presets.filter(p => p.kind === mediaKind)) $("media-preset").add(new Option(p.name + (p.ready ? " · installed" : " · setup needed"), p.id));
-  if (state.presets.some(p => p.id === selected && p.kind === mediaKind)) $("media-preset").value = selected;
-  $("studio-hint").textContent = "Generation unloads the chat model to free memory. " + (state.runtime_found ? "Missing models can be installed with scripts/setup_models.py; see docs/STUDIO.md." : "Diffusion runtime setup is required; see docs/STUDIO.md.");
-  const current = state.jobs.find(j => j.status === "running");
-  if (current && current.progress) {
-    if (progressManager.mode !== "studio" || progressManager.root.hidden) progressManager.start("studio");
-    progressManager.update(current.progress);
-  } else if (!current && progressManager.root.classList.contains("progress-studio")) {
-    progressManager.finish();
-  }
-  $("media-status").textContent = current ? "Generating locally… This may take several minutes. You can leave this tab open or return later." : "Ready for your next creation.";
-  $("media-generate").disabled = Boolean(current);
-  $("media-stop").disabled = !current;
-  $("creations").replaceChildren(); clearMediaURLs();
-  for (const job of state.jobs.filter(j => j.kind === mediaKind)) {
-    const card = document.createElement("article"); card.className = "creation";
-    const title = document.createElement("p"); title.textContent = job.prompt;
-    const detail = document.createElement("small"); detail.textContent = `${job.status} · seed ${job.seed} · ${job.seconds || 0}s` + (job.error ? ` · ${job.error}` : ""); card.append(title, detail);
-    if (job.status === "complete") {
-      const button = document.createElement("button"); button.textContent = job.kind === "video" ? "Download video (AVI)" : "View / download image";
-      button.onclick = async () => { try { const blob = await (await api(`/api/media/result/${job.id}`)).blob(); const url = URL.createObjectURL(blob); mediaURLs.push(url); if(job.kind === "image") {const img = document.createElement("img"); img.src = url; img.alt = job.prompt; card.append(img); if (job.img2img) await addComparison(card, job.id, url); } const link = document.createElement("a"); link.href = url; link.download = `KISS-${job.id}.${job.kind === "video" ? "avi" : "png"}`; link.textContent = "Save file ↓"; card.append(link); if (job.kind === "video") link.click(); button.disabled = true; } catch(e) { notice(e.message); } }; card.append(button);
-    }
-    async function addComparison(card, jid, resultURL) {
-      const sourceResponse = await api(`/api/media/source/${jid}`);
-      const sourceURL = URL.createObjectURL(await sourceResponse.blob()); mediaURLs.push(sourceURL);
-      const compare = document.createElement("div"); compare.className = "comparison";
-      const before = document.createElement("img"); before.src = sourceURL; before.alt = "Before editing";
-      const afterWrap = document.createElement("div"); afterWrap.className = "comparison-after";
-      const after = document.createElement("img"); after.src = resultURL; after.alt = "After editing";
-      const range = document.createElement("input"); range.type = "range"; range.min = "0"; range.max = "100"; range.value = "50"; range.setAttribute("aria-label", "Before and after comparison");
-      range.oninput = () => { afterWrap.style.width = `${range.value}%`; };
-      afterWrap.append(after); compare.append(before, afterWrap, range); card.append(compare);
-    }
-    $("creations").append(card);
-  }
-  clearTimeout(mediaPoll); if (current) mediaPoll = setTimeout(() => refreshMedia().catch(e => notice(e.message)), 2500);
-}
-$("media-generate").onclick = async () => {
-  $("media-generate").disabled = true; notice(); progressManager.start("studio");
-  try {
-    const payload = {preset: $("media-preset").value, prompt: $("media-prompt").value, steps: Number($("media-steps").value), seed: Number($("media-seed").value), experimental: $("video-confirm").checked};
-    const endpoint = studioWorkflow === "img2img" ? "/api/studio/img2img" : "/api/media/start";
-    if (studioWorkflow === "img2img") {
-      if (!sourceImageData) throw new Error("Upload a source image before editing.");
-      payload.image = sourceImageData; payload.strength = Number($("image-strength").value); payload.negative_prompt = $("negative-prompt").value;
-    }
-    await api(endpoint, "POST", payload);
-  } catch(e) { notice(e.message); }
-  await refreshMedia().catch(e => notice(e.message));
-};
-$("media-stop").onclick = async () => { try {await api("/api/media/cancel", "POST", {}); await refreshMedia();} catch(e) {notice(e.message);} };
-
-function renderContent(target, value) {
-  target.replaceChildren();
-  const blocks = value.split(/```[^\n]*\n([\s\S]*?)```/g);
-  blocks.forEach((part, index) => {
-    if (index % 2) { const pre = document.createElement("pre"), code = document.createElement("code"); code.textContent = part; pre.append(code); target.append(pre); }
-    else { part.split(/\*\*([^*]+)\*\*/g).forEach((piece, i) => { if(i % 2) { const strong = document.createElement("strong"); strong.textContent = piece; target.append(strong); } else target.append(document.createTextNode(piece)); }); }
-  });
-}
-
-function addAgentEvent(item) {
-  const block = document.createElement("details");
-  block.open = true;
-  const summary = document.createElement("summary");
-  summary.textContent = item.type === "action" ? `Action · ${item.tool}` :
-    item.type === "observation" ? `Observation · ${item.tool}` : "Agent protocol error";
-  const output = document.createElement("pre");
-  output.textContent = JSON.stringify(item, null, 2);
-  block.append(summary, output);
-  $("messages").append(block);
-  scrollMessages();
-}
-
-const selectedFiles = new Set();
-let currentProposal = null;
-async function refreshProject() {
-  const files = await (await api('/api/project')).json();
-  $('project-files').replaceChildren();
-  for (const f of files) {
-    const row = document.createElement('div'); row.className = 'project-row';
-    const label = document.createElement('label'), check = document.createElement('input');
-    check.type = 'checkbox'; check.checked = selectedFiles.has(f.path);
-    check.onchange = () => check.checked ? selectedFiles.add(f.path) : selectedFiles.delete(f.path);
-    label.append(check, document.createTextNode(f.path));
-    const download = document.createElement('button'); download.textContent = 'Download';
-    download.onclick = async () => { try {
-      const result = await (await api('/api/project/read', 'POST', {path:f.path})).json();
-      const url = URL.createObjectURL(new Blob([result.content], {type:'text/plain;charset=utf-8'}));
-      const a = document.createElement('a'); a.href=url; a.download=f.path.split('/').pop(); a.click();
-      setTimeout(()=>URL.revokeObjectURL(url),1000);
-    } catch(e) {notice(e.message);} };
-    row.append(label,download); $('project-files').append(row);
-  }
-}
-async function uploadFiles(files) {
-  if(busy) return;
-  setBusy(true);
-  try {
-    for(const file of files) {
-      if(file.size > 60000) throw new Error(`${file.name}: maximum size is 60 KB.`);
-      const content = new TextDecoder('utf-8', {fatal:true}).decode(await file.arrayBuffer());
-      const path = file.webkitRelativePath || file.name;
-      await api('/api/project/upload','POST',{path,content});
-      selectedFiles.add(path);
-    }
-    notice('Files uploaded. Select files to include in your next message.');
-  } catch(e) {notice(e.message);}
-  finally {setBusy(false); await refreshProject().catch(e=>notice(e.message));}
-}
-$('upload-files').onchange = event => uploadFiles([...event.target.files]);
-$('upload-folder').onchange = event => uploadFiles([...event.target.files]);
-function showProposal(p) {
-  currentProposal=p; $('change-review').hidden=false;
-  $('change-id').value=p.id;
-  $('change-status').textContent=`${p.status} · ${p.files.length} file(s)`;
-  if (window.renderDiffFiles) window.renderDiffFiles($('change-diff'), p.files,
-    file => applyFileChange(file, false), file => applyFileChange(file, true));
-  $('apply-change').disabled=p.status!=='pending';
-  $('undo-change').disabled=p.status!=='applied';
-}
-for(const action of ['apply','undo']) $(action+'-change').onclick=async()=>{
-  if(busy || !currentProposal) return;
-  setBusy(true);
-  try {showProposal(await (await api('/api/project/'+action,'POST',{id:currentProposal.id})).json()); await refreshProject();}
-  catch(e){notice(e.message);}finally{setBusy(false);}
-};
-$('open-change').onclick=async()=>{try{showProposal(await (await api('/api/project/change','POST',{id:$('change-id').value.trim()})).json());}catch(e){notice(e.message);}};
-$('undo-last-edit').onclick=async()=>{try{setBusy(true);showProposal(await (await api('/api/project/undo-last','POST',{})).json());await refreshProject();}catch(e){notice(e.message);}finally{setBusy(false);}};
-async function applyFileChange(file, undo) {
-  if (busy || !currentProposal) return;
-  try { setBusy(true); showProposal(await (await api(`/api/project/${undo ? 'undo-file' : 'apply-file'}`, 'POST', {id: currentProposal.id, path: file.path})).json()); await refreshProject(); }
-  catch (e) { notice(e.message); } finally { setBusy(false); }
-}
-refreshProject().catch(e=>notice(e.message));
-
-window.refreshMyAi = () => refresh().catch(e => notice(e.message));
-
-async function loadPreferences() {
-  const p = await (await api('/api/preferences')).json();
-  $('personal-instructions').value = p.instructions;
-  $('output-tokens').value = String(p.max_output_tokens);
-}
-$('save-preferences').onclick = async () => {
-  try {
-    await api('/api/preferences', 'POST', {instructions: $('personal-instructions').value, max_output_tokens: Number($('output-tokens').value)});
-    window.showToast?.('Preferences saved on this computer.', 'success');
-  } catch(e) { notice(e.message); }
-};
-loadPreferences().catch(e => notice(e.message));
-
-$("quick-load").onclick = () => $("load").click();
+Promise.all([
+  refresh(),
+  listChats().then(async () => {
+    const id = sessionStorage.getItem("kiss-active-chat");
+    if (id && chats.some((c) => c.id === id) && !busy) await openChat(id);
+  }),
+  mediaList(),
+  api("/api/preferences")
+    .then((r) => r.json())
+    .then((p) => {
+      $("personal-instructions").value = p.instructions;
+      $("output-tokens").value = String(p.max_output_tokens);
+    }),
+]).catch((e) => notice(e.message));

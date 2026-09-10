@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 from .storage import Store
 from .engine import Engine
 from .hardware import detect_hardware
+from .routing import plan_request
 from .media import Media
 from .workbench import Workbench
 from .agent import AutonomousAgent, AgentStopped
@@ -94,6 +95,7 @@ def make_server(app, port=0):
             static = {"/": ("index.html", "text/html; charset=utf-8"),
                       "/js/tasks.js": ("js/tasks.js", "text/javascript; charset=utf-8"),
                       "/css/base.css": ("css/base.css", "text/css; charset=utf-8"),
+                      "/css/unified.css": ("css/unified.css", "text/css; charset=utf-8"),
                       "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                       "/style.css": ("style.css", "text/css; charset=utf-8"),
                       "/logo.svg": ("logo.svg", "image/svg+xml"),
@@ -205,6 +207,12 @@ def make_server(app, port=0):
                 body = self.body()
             except (ValueError, TypeError) as exc:
                 self.output(400, {"error": str(exc)})
+                return
+            if path == "/api/route":
+                try:
+                    self.output(200, plan_request(body, app.engine.models(), app.media.catalog()))
+                except (ValueError, TypeError) as exc:
+                    self.output(400, {'error': str(exc)})
                 return
             if path == "/api/tasks" or path.startswith("/api/tasks/"):
                 try:
@@ -339,7 +347,7 @@ def make_server(app, port=0):
             mode = body.get("mode", "chat")
             if mode not in ("chat", "code", "edit", "docs"):
                 raise ValueError("Unknown chat mode")
-            system = "You are MyAi, a helpful local assistant. You have no web access. Be clear and honest about uncertainty."
+            system = "You are KISS, a helpful local assistant. You have no web access. Be clear and honest about uncertainty."
             if mode == "code":
                 system += " You are helping with coding. State assumptions, provide complete code in fenced code blocks, explain fixes briefly, and suggest relevant tests. Never claim to have run code or accessed files."
             selected = body.get("files", [])

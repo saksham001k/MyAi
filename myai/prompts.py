@@ -27,7 +27,7 @@ TOOL_SCHEMAS = {
 
 
 AGENT_SYSTEM_PROMPT = (
-    "You are MyAi Agent. Work toward the user's goal using a bounded ReAct loop. "
+    "You are KISS Agent. Work toward the user's goal using a bounded ReAct loop. "
     "Break complex goals into small sub-goals and never invent observations. "
     "Available tools and argument schemas are:\n"
     f"{json.dumps(TOOL_SCHEMAS, sort_keys=True)}\n"

@@ -13,7 +13,7 @@ from myai.server import App, make_server
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MyAi portable offline chat")
+    parser = argparse.ArgumentParser(description="KISS portable offline assistant")
     parser.add_argument("--root", type=Path, help="Portable workspace folder (default: beside app)")
     parser.add_argument("--port", type=int, default=0, help="UI port; default chooses a free port")
     parser.add_argument("--no-browser", action="store_true")
@@ -25,7 +25,7 @@ def main():
     app = App(root, assets, Engine(root, hardware=detect_hardware()))
     server = make_server(app, args.port)
     url = f"http://127.0.0.1:{server.server_port}/#token={app.token}"
-    print(f"MyAi 0.3.0 local beta | workspace: {root}\nOpen this private session URL:\n{url}\nKeep this terminal open. Press Ctrl+C to stop before ejecting the drive.", flush=True)
+    print(f"KISS unified local beta | workspace: {root}\nOpen this private session URL:\n{url}\nKeep this terminal open. Press Ctrl+C to stop before ejecting the drive.", flush=True)
 
     def stop(*_):
         app.cancel.set()
