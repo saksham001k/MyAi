@@ -1,3 +1,6 @@
-psutil>=5.9
-playwright>=1.40
-Pillow>=10.0
+# Core chat/project tasks run without external Python packages.
+# These local packages enable system diagnostics, image editing and PDF text.
+psutil>=5.9,<8
+Pillow>=10.0,<13
+pypdf>=6.0,<7
+# Optional interactive browser: python3 scripts/setup_local.py --browser

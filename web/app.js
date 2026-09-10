@@ -19,13 +19,15 @@ async function api(path, method = "GET", body) {
 }
 function setBusy(value) {
   busy = value;
-  for (const id of ["load", "unload", "new-chat", "model", "context", "gpu", "export"]) $(id).disabled = value;
+  for (const id of ["load", "quick-load", "unload", "new-chat", "model", "context", "gpu", "export"]) $(id).disabled = value;
   $("send").disabled = value || !running;
   $("prompt").disabled = value;
 }
 async function refresh() {
   const state = await (await api("/api/status")).json();
   running = state.running;
+  $("quick-load").hidden = running;
+  $("quick-load").disabled = busy || state.busy || !state.models.length;
   const selected = $("model").value;
   $("model").replaceChildren();
   for (const model of state.models) {
@@ -34,13 +36,14 @@ async function refresh() {
   }
   if (!state.models.length) $("model").add(new Option("No GGUF models found", ""));
   if (state.models.some(m => m.name === selected)) $("model").value = selected;
+  if (state.model) $("model").value = state.model;
   $("engine-status").textContent = running ? `● Ready · ${state.model}` : "○ No model loaded · local workspace";
   if (state.hardware) {
     const labels = {metal: "⚡ Apple Silicon Metal", cuda: "🟢 CUDA", vulkan: "◆ Vulkan", cpu: "○ CPU"};
     const vram = state.hardware.vram_mb ? ` · ${Math.round(state.hardware.vram_mb / 1024)} GB VRAM` : "";
     $("hardware-badge").textContent = `${labels[state.hardware.backend] || state.hardware.backend}${vram}`;
   }
-  $("setup-hint").textContent = !state.runtime_found ? `Setup: put llama-server and its companion libraries in runtime/${state.platform}/. See docs/SETUP.md.` : !state.models.length ? "Add a compatible .gguf file to the models folder, then reload this page." : "Start with CPU and 4096 context. GPU mode needs a matching runtime. Larger context uses more memory.";
+  $("setup-hint").textContent = !state.runtime_found ? `Setup: put llama-server and its companion libraries in runtime/${state.platform}/. See docs/SETUP.md.` : !state.models.length ? "Add a compatible .gguf file to the models folder, then reload this page." : "Choose Automatic acceleration and Load model. Local inference needs no login, API key or credits. Larger context uses more memory.";
   $("composer-hint").textContent = running ? "Local only · Enter to send · Shift+Enter for a new line" : "Load a model to begin · Shift+Enter for a new line";
   $("send").disabled = busy || !running;
 }
@@ -75,7 +78,7 @@ async function openChat(id) {
   for (const m of chat.messages) message(m.role, m.content, m.status);
   renderHistory(); scrollMessages();
 }
-function newChat() { active = null; $("chat-title").textContent = "A little space for big ideas."; $("messages").innerHTML = welcome; renderHistory(); bindSuggestions(); notice(); }
+function newChat() { active = null; $("chat-title").textContent = "What would you like to get done?"; $("messages").innerHTML = welcome; renderHistory(); bindSuggestions(); notice(); }
 function scrollMessages() { $("messages").scrollTop = $("messages").scrollHeight; }
 function bindSuggestions() { document.querySelectorAll("[data-prompt]").forEach(button => button.onclick = () => { $("prompt").value = button.dataset.prompt; $("prompt").focus(); }); }
 $("search").oninput = renderHistory;
@@ -93,7 +96,7 @@ $("scroll-bottom").onclick = () => { scrollMessages(); $("scroll-bottom").hidden
 $("settings-toggle").onclick = () => { $("settings").hidden = !$("settings").hidden; $("settings-toggle").setAttribute("aria-expanded", String(!$("settings").hidden)); };
 $("load").onclick = async () => {
   notice(); setBusy(true); $("engine-status").textContent = "Loading model… larger models may take a few minutes.";
-  try { await api("/api/engine/start", "POST", {model: $("model").value, context: Number($("context").value), gpu_layers: Number($("gpu").value)}); }
+  try { await api("/api/engine/start", "POST", {model: $("model").value, context: Number($("context").value), gpu_layers: $("gpu").value === "auto" ? null : Number($("gpu").value)}); }
   catch(e) { notice(e.message); }
   finally { setBusy(false); await refresh().catch(e => notice(e.message)); }
 };
@@ -154,11 +157,14 @@ const mediaURLs = [];
 function clearMediaURLs() { for (const url of mediaURLs.splice(0)) URL.revokeObjectURL(url); }
 document.querySelectorAll("[data-workspace]").forEach(button => button.onclick = async () => {
   if (busy) return notice("Wait for the active operation to finish.");
-  const mode = button.dataset.workspace; const studio = mode === "image" || mode === "video";
+  const mode = button.dataset.workspace; const taskMode = mode === "agent"; const studio = mode === "image" || mode === "video";
   document.querySelectorAll("[data-workspace]").forEach(b => b.classList.toggle("primary", b === button));
   document.body.dataset.mode = mode === "image" || mode === "video" ? "studio" : mode;
-  $("studio").hidden = !studio; $("messages").hidden = studio; $("project-panel").hidden = studio; document.querySelector("footer").hidden = studio;
-  document.querySelector(".engine-bar").hidden = studio; $("settings").hidden = studio;
+  $("task-panel").hidden = !taskMode;
+  $("docs-note").hidden = mode !== "docs";
+  $("studio").hidden = !studio; $("messages").hidden = studio || taskMode; $("project-panel").hidden = studio || taskMode; document.querySelector("footer").hidden = studio || taskMode;
+  if (taskMode) window.showTasks?.();
+  document.querySelector(".engine-bar").hidden = studio; $("settings").hidden = true; $("settings-toggle").setAttribute("aria-expanded", "false");
   if (studio) { mediaKind = mode; $("video-opt-in").hidden = mode !== "video"; await refreshMedia().catch(e => notice(e.message)); }
   else { workspaceMode = mode; $("prompt").placeholder = mode === "code" ? "Paste code, describe a bug, or ask for an implementation…" : "Ask anything. Keep it yours."; await refresh().catch(e => notice(e.message)); }
 });
@@ -345,3 +351,20 @@ async function applyFileChange(file, undo) {
   catch (e) { notice(e.message); } finally { setBusy(false); }
 }
 refreshProject().catch(e=>notice(e.message));
+
+window.refreshMyAi = () => refresh().catch(e => notice(e.message));
+
+async function loadPreferences() {
+  const p = await (await api('/api/preferences')).json();
+  $('personal-instructions').value = p.instructions;
+  $('output-tokens').value = String(p.max_output_tokens);
+}
+$('save-preferences').onclick = async () => {
+  try {
+    await api('/api/preferences', 'POST', {instructions: $('personal-instructions').value, max_output_tokens: Number($('output-tokens').value)});
+    window.showToast?.('Preferences saved on this computer.', 'success');
+  } catch(e) { notice(e.message); }
+};
+loadPreferences().catch(e => notice(e.message));
+
+$("quick-load").onclick = () => $("load").click();

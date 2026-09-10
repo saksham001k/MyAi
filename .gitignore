@@ -18,3 +18,7 @@ runtime/*
 !runtime/.gitkeep
 .DS_Store
 .env
+
+# Local task backups and personal plans
+.kiss/
+.local-planning/

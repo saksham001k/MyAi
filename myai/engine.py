@@ -32,6 +32,7 @@ class Engine:
         self.key = secrets.token_urlsafe(32)
         self.lock = threading.Lock()
         self.log = None
+        self.context = 4096
         self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     @property
@@ -103,6 +104,7 @@ class Engine:
                         with self.http.open(self.request("/health"), timeout=2) as response:
                             if response.status == 200:
                                 self.model = name
+                                self.context = context
                                 return self.status()
                     except (OSError, urllib.error.URLError):
                         pass
@@ -117,11 +119,13 @@ class Engine:
             data=json.dumps(data).encode() if data is not None else None,
             headers={"Authorization": f"Bearer {self.key}", "Content-Type": "application/json"})
 
-    def stream(self, messages, temperature, max_tokens=1024):
+    def stream(self, messages, temperature, max_tokens=1024, response_format=None):
         if not self.status()["running"]:
             raise ValueError("Load a model before sending a message.")
         payload = {"messages": messages, "stream": True, "temperature": temperature,
                    "max_tokens": max_tokens}
+        if response_format is not None:
+            payload["response_format"] = response_format
         try:
             with self.http.open(self.request("/v1/chat/completions", payload), timeout=180) as response:
                 for raw in response:
@@ -140,6 +144,9 @@ class Engine:
                             yield content
         except urllib.error.HTTPError as exc:
             raise RuntimeError(f"Engine rejected the request ({exc.code}). The conversation may exceed the context; start a new chat or increase context.") from exc
+
+    def agent_stream(self, messages):
+        return self.stream(messages, 0.1, max_tokens=2048, response_format={"type": "json_object"})
 
     def stop(self):
         if self.process is not None:

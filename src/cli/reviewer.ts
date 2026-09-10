@@ -9,13 +9,14 @@ export interface ReviewSummary {
 }
 
 export function summarizeDiff(diff: string): ReviewSummary {
-  const files = [...diff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => match[1]);
+  const files = [...new Set([...diff.matchAll(/^(?:\+\+\+ b\/|--- a\/)(.+)$/gm)].map((match) => match[1]))];
   const additions = diff.split(/\r?\n/).filter((line) => line.startsWith("+") && !line.startsWith("+++")).length;
   const deletions = diff.split(/\r?\n/).filter((line) => line.startsWith("-") && !line.startsWith("---")).length;
   return { files, additions, deletions };
 }
 
 export interface ReviewIO {
+  close?: () => void;
   question(prompt: string): Promise<string>;
   write(text: string): void;
 }
@@ -33,7 +34,7 @@ export async function reviewWorktree(
   const summary = summarizeDiff(diff);
   io.write(`\nModified files: ${summary.files.join(", ") || "none"}\n+${summary.additions} / -${summary.deletions}\n`);
   while (true) {
-    const choice = (await io.question("[a] Accept & Merge  [d] View Full Diff  [r] Retry with Feedback  [c] Discard & Cancel: ")).trim().toLowerCase();
+    const choice = (await io.question("[a] Apply reviewed files (no commit)  [d] View Full Diff  [r] Retry with Feedback  [c] Discard & Cancel: ")).trim().toLowerCase();
     if (choice === "a") { await actions.accept(); return "accepted"; }
     if (choice === "d") { io.write(diff || "No changes.\n"); continue; }
     if (choice === "r") { await actions.retry(await io.question("Feedback: ")); return "retried"; }
@@ -45,6 +46,7 @@ export async function reviewWorktree(
 export function terminalReviewIO(): ReviewIO {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return {
+    close: () => rl.close(),
     question: (prompt) => rl.question(prompt),
     write: (text) => process.stdout.write(text)
   };

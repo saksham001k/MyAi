@@ -1,73 +1,65 @@
 # MyAi
 
-**Your models. Your conversations. Your workspace.**
+**Your local model. Your projects. No mandatory AI account or credits.**
 
-MyAi is a local-first AI chat application by Saksham Katiyar. It runs a compatible GGUF model through a dedicated llama.cpp server and keeps conversations beside the app, ready to move with the workspace.
+MyAi is a local-first personal assistant by Saksham Katiyar. The **0.3 local beta** adds persistent project/research tasks, reviewed file changes with undo, test verification, basic text/PDF understanding and local response preferences to the existing chat and Studio application.
 
-**Status: v0.1.0 source implementation. Real-model and physical pendrive acceptance testing are still required.** This repository contains working application code, tests, launchers, and packaging workflows—not pretrained model weights or runtime binaries. It does not claim to outperform PortableLM yet.
+It runs compatible GGUF models through its own llama.cpp process. The web app does not require an OpenAI account, API key, paid AI service or Ollama. Internet is needed for initial downloads and web research. A local model's quality and speed depend on your machine; no unlimited capability or commercial-agent parity is claimed.
 
-## What works in this version
+## Start
 
-- Browser chat interface with streamed text, response cancellation, copy, and Markdown export.
-- Persistent conversations, title search, and deletion using SQLite.
-- Local GGUF model discovery, model loading/unloading, context and GPU-layer controls.
-- Isolated llama-server process with loopback binding and a per-launch API key.
-- Authenticated application API, strict origin checks, no external UI assets or cloud fallback.
-- Relative workspace layout, transactional saves, checksum-verified model import helper.
-- Source launchers for Mac, Windows and Linux; native app packaging workflow.
-
-## First run on Mac or Linux
-
-```bash
-git clone https://github.com/saksham001k/MyAi.git
-cd MyAi
-python3 run.py
+```sh
+python3 scripts/setup_local.py
+python3 scripts/local.py start
 ```
 
-The interface opens even before a model is installed and explains which files are missing. **Source mode needs Python 3.10+.** On Windows, use `python run.py` or `Start-MyAi.bat`.
+On Mac, you can also double-click `Start-MyAi.command`. Existing models and runtime files are reused. If no runtime/model is installed, see [Setup](docs/SETUP.md); the optional Apple Silicon model helper is `python3 scripts/setup_mac.py`.
 
-For actual AI answers, follow [SETUP](docs/SETUP.md) to add a compatible llama.cpp runtime and GGUF model. No downloads happen automatically. Once prepared, chat does not require internet access.
+Choose a model and **Load selected model**. For project/research tasks on the tested 16 GiB Mac, use Settings → 8192 context → Automatic acceleration. Model loading does not require login.
 
-## Workspace layout
+## What you can do
 
-| Path | Purpose |
-| --- | --- |
-| `run.py`, `myai/` | Application, API, inference adapter and storage |
-| `web/` | Bundled interface, with no CDN dependencies |
-| `models/` | Your compatible `.gguf` models; never committed |
-| `runtime/<platform>-<architecture>/` | `llama-server` plus required libraries; never committed |
-| `data/` | Chat database and engine diagnostics; never committed |
-| `scripts/` | Model import, environment checks and package assembly |
-| `tests/` | API, inference protocol and portability tests |
-| `docs/` | Setup, architecture, limitations and pendrive acceptance |
+- **Chat:** stream local answers, save conversations, copy/export them and customize response instructions.
+- **Code:** discuss pasted/selected code and review edits to uploaded copies.
+- **Tasks:** choose a project directory, let the agent read/edit a source copy, run a supplied test command, then review and apply changes with conflict detection and undo.
+- **Research tasks:** search/read public webpages and save a report with retrieved source evidence using your local model.
+- **Docs:** attach text/code or text-based PDFs and ask about extracted passages. Unsupported/scanned content is labeled honestly.
+- **Studio:** existing image, image-to-image and experimental video adapters; separate compatible diffusion runtime/models are required.
 
-## Development checks
+Project commands run as your OS user; a working copy is not an OS sandbox. Enable command execution only for trusted projects and task instructions. Apply never implies Git commit or push.
 
-```bash
-python3 -m unittest discover -s tests -v
-python3 scripts/doctor.py
+Read the [local beta guide](docs/LOCAL-BETA.md) for exact setup, limits, architecture and acceptance evidence. It is the current capability reference; older release documents describe earlier milestones.
+
+## Checks
+
+```sh
+python3 scripts/local.py check
+python3 scripts/local.py test
 ```
 
-`doctor.py` is expected to report missing items until your runtime and model are installed. Tests use a protocol fixture, not real AI; passing them does not validate model quality or speed.
+Optional TypeScript source-analysis worker and developer checks:
 
-## Packaged builds
+```sh
+python3 scripts/setup_local.py --developer
+npm run typecheck
+npm test
+npm run build
+```
 
-Run **Actions → Package portable app → Run workflow**. The workflow builds a native application for each runner platform; download the artifact matching your computer. The package includes Python internally, but **you must still add the llama.cpp runtime and a model**. It is not an all-in-one installer yet. Builds are not notarized or production-certified. Architecture is included in each artifact name. Intel Mac and ARM Windows builds require matching build runners and are not covered by the initial matrix.
+Basic chat/project tools can start without extra Python packages. The standard setup enables PDF reading, image preprocessing and system diagnostics. Optional Playwright browser installation is separate: `python3 scripts/setup_local.py --browser`.
 
-Keep the entire extracted directory, including `_internal`, together. See [pendrive preparation](docs/PENDRIVE.md) before moving it.
+## Data and ownership
 
-## Scope and next steps
+Conversations live in `data/myai.sqlite3`; tasks, evidence, working copies and reports live in `data/tasks/`. Models stay in `models/`; native runtimes stay in `runtime/`. These generated/private directories are Git-ignored. Personal planning is also excluded. Storage is local and unencrypted.
 
-The first target is reliable portable chat. Document RAG, repository indexing, voice, Android, automatic model recommendations, resumable downloads, encrypted storage, and authenticated LAN sharing are **not implemented**. See [ROADMAP](docs/ROADMAP.md) for acceptance gates.
+The HTTP interface binds to loopback, uses an automatic per-launch session token and checks origins. This session protection requires no user account. Stop the app before moving/copying its workspace. Back up important personal data independently of Git.
 
-MyAi stores data locally, but does not make the host computer trustworthy or prevent operating-system/browser caches. Storage is not encrypted. Stop MyAi before ejecting or copying its workspace.
+## Current acceptance and remaining work
+
+A real local Qwen3-4B run fixed a small Python test project and passed its supplied test. Another run read Python.org and saved a cited report. These are limited hardware acceptance examples, not a claim of broad autonomous reliability. Automated tests cover API/protocol and lifecycle behavior.
+
+Long-term memory, OCR, chat vision, voice, native desktop control, app connections, background scheduling and robust restart resumption remain on the roadmap. Image/video quality and physical pendrive portability are not newly certified by this release.
 
 ## Credits
 
-Inspired by the portable-workspace concept in [PortableLM](https://github.com/orailnoor/PortableLM). MyAi's application code is an original implementation. Inference is provided by [llama.cpp](https://github.com/ggml-org/llama.cpp); its binaries and models have their own licenses and compatibility requirements. No PortableLM source or model weights are included.
-
-MyAi application code is MIT licensed. See [LICENSE](LICENSE).
-
-## Upload and edit project files
-
-MyAi now accepts UTF-8 text/code uploads and folder uploads, includes selected files in local chat context, and offers reviewed coding changes with Apply, Undo, and individual file downloads. Open **Project files · Upload and edit**. See [Workbench guide](docs/WORKBENCH.md) for limits and usage. This edits uploaded copies; it does not run terminal commands.
+Inspired by the portable-workspace concept in [PortableLM](https://github.com/orailnoor/PortableLM). Application code is an original MIT-licensed implementation; see [LICENSE](LICENSE). Inference uses [llama.cpp](https://github.com/ggml-org/llama.cpp); diffusion uses [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp). Runtime/model licenses and compatibility requirements remain separate. No pretrained model weights or runtime binaries belong in source commits.

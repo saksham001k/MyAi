@@ -33,7 +33,7 @@ class FakeEngine:
     def stop(self):
         self.running = False
 
-    def stream(self, messages, temperature):
+    def stream(self, messages, temperature, max_tokens=1024):
         self.seen = messages
         yield "Hello "
         if self.fail:

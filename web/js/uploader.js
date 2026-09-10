@@ -13,7 +13,8 @@
       const chip = document.createElement("div"); chip.className = "file-chip";
       const icon = document.createElement("span"); icon.setAttribute("aria-hidden", "true"); icon.textContent = item.file.type.startsWith("image/") ? "▧" : "◇";
       const name = document.createElement("span"); name.className = "file-chip-name"; name.textContent = item.manifest.filename;
-      const meta = document.createElement("small"); meta.textContent = size(item.manifest.size_bytes);
+      const meta = document.createElement("small"); meta.textContent = size(item.manifest.size_bytes) + " · " + (item.manifest.extraction?.status === "ready" ? "Text ready" : "Stored only");
+      meta.title = item.manifest.extraction?.detail || "";
       const remove = document.createElement("button"); remove.type = "button"; remove.className = "file-chip-remove"; remove.setAttribute("aria-label", `Remove ${item.manifest.filename}`); remove.textContent = "×";
       remove.onclick = () => { files.delete(id); render(); };
       chip.append(icon, name, meta, remove); chips.append(chip);
@@ -51,6 +52,6 @@
   });
   window.addEventListener("dragover", event => { event.preventDefault(); event.stopPropagation(); document.body.classList.add("upload-dragging"); });
   window.addEventListener("dragleave", event => { event.preventDefault(); event.stopPropagation(); if (!event.relatedTarget) document.body.classList.remove("upload-dragging"); });
-  window.addEventListener("drop", event => { event.preventDefault(); event.stopPropagation(); document.body.classList.remove("upload-dragging"); handle(event.dataTransfer.files); });
+  window.addEventListener("drop", event => { event.preventDefault(); event.stopPropagation(); document.body.classList.remove("upload-dragging"); if(document.body.dataset.mode !== "studio") handle(event.dataTransfer.files); });
   window.uploadedFiles = () => [...files.values()].map(item => item.manifest);
 })();

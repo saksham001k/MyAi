@@ -14,6 +14,7 @@ export interface AgentEvent {
 }
 
 export interface AgentLoopOptions {
+  workspaceRoot?: string;
   maxSteps?: number;
   maxToolCalls?: number;
   onEvent?: (event: AgentEvent) => void;
@@ -57,11 +58,13 @@ export class AgentLoop {
     private readonly tools: AgentTool[],
     options: AgentLoopOptions = {}
   ) {
+    this.workspaceRoot = options.workspaceRoot;
     this.maxSteps = Math.max(1, Math.min(options.maxSteps ?? 10, 50));
     this.maxToolCalls = Math.max(1, Math.min(options.maxToolCalls ?? this.maxSteps, 100));
     this.onEvent = options.onEvent;
   }
 
+  private readonly workspaceRoot?: string;
   private readonly onEvent?: (event: AgentEvent) => void;
 
   public async run(goal: string): Promise<AgentResult> {
@@ -71,7 +74,7 @@ export class AgentLoop {
       this.onEvent?.(event);
     };
     const schemas = this.tools.map((tool) => tool.schema);
-    const repoMap = await generateRepoMap(800);
+    const repoMap = await generateRepoMap(800, {root: this.workspaceRoot});
     let prompt = `You are a local autonomous developer. Goal: ${goal}\nRepository map:\n${repoMap}\nTools: ${JSON.stringify(schemas)}\nRespond with {"thought":"...","action":{"tool":"name","args":{...}}} or {"final":"..."}.`;
     let calls = 0;
     for (let step = 1; step <= this.maxSteps; step += 1) {

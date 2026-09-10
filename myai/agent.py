@@ -16,7 +16,7 @@ class AgentStopped(RuntimeError):
 class AutonomousAgent:
     def __init__(self, engine, max_iterations: int = 10, tool_call=None,
                  auto_approve: bool = False, workspace_root=None,
-                 repair_callback=None):
+                 repair_callback=None, cancel=None, system_prompt=None, verify_final=None):
         if callable(max_iterations) and tool_call is None:
             tool_call, max_iterations = max_iterations, 10
         self.engine = engine
@@ -27,6 +27,9 @@ class AutonomousAgent:
         self.test_timeout = 120
         self.workspace_root = workspace_root
         self.repair_callback = repair_callback
+        self.cancel = cancel
+        self.system_prompt = system_prompt or AGENT_SYSTEM_PROMPT
+        self.verify_final = verify_final
 
     @staticmethod
     def parse_response(response: str) -> Dict[str, Any]:
@@ -49,39 +52,72 @@ class AutonomousAgent:
             return {"type": "action", "thought": thought.group(1).strip(),
                     "tool": payload["tool"], "args": args}
         try:
-            legacy = json.loads(response.strip())
+            legacy = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip()))
         except json.JSONDecodeError as exc:
             raise ValueError("Expected Thought/Action or Final Answer") from exc
         if isinstance(legacy, dict) and isinstance(legacy.get("final"), str):
             return {"type": "final", "content": legacy["final"]}
         action = legacy.get("action") if isinstance(legacy, dict) else None
+        if isinstance(legacy, dict) and isinstance(legacy.get('tool'), str):
+            return {'type': 'action', 'thought': '', 'tool': legacy['tool'], 'args': legacy.get('args', {})}
+        if isinstance(action, str):
+            return {'type': 'action', 'thought': '', 'tool': action, 'args': legacy.get('args', {})}
         if isinstance(action, dict) and isinstance(action.get("tool"), str):
             return {"type": "action", "thought": action.get("reason", ""),
-                    "tool": action["tool"], "args": action.get("arguments", {})}
+                    "tool": action["tool"], "args": action.get("args", action.get("arguments", {}))}
         raise ValueError("Expected Thought/Action or Final Answer")
 
     def _model(self, messages):
         if callable(self.engine):
             return self.engine(messages)
-        return self.engine.stream(messages, 0.2, max_tokens=1024)
+        if hasattr(self.engine, "agent_stream"):
+            return self.engine.agent_stream(messages)
+        return self.engine.stream(messages, 0.2, max_tokens=2048)
 
     def run(self, user_query: str, stream_callback=None) -> Dict[str, Any]:
-        messages = [{"role": "system", "content": AGENT_SYSTEM_PROMPT},
+        messages = [{"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_query}]
         observations = []
         for iteration in range(1, self.max_iterations + 1):
-            response = "".join(self._model(messages))
+            self.check_cancel()
+            # Retain the task and newest observations; full history is in task events.
+            # Character budgeting is conservative and not an exact tokenizer count.
+            budget = max(4000, (getattr(self.engine, 'context', 8192) - 2048) * 2)
+            while len(messages) > 4 and sum(len(m['content']) for m in messages) > budget:
+                del messages[2:4]
+            if sum(len(m['content']) for m in messages) > budget:
+                raise ValueError('Task context exceeds the local model budget. Select 8192 context or use a smaller task/file.')
+            stream = self._model(messages)
+            parts = []
+            try:
+                for part in stream:
+                    self.check_cancel()
+                    parts.append(part)
+            finally:
+                if hasattr(stream, "close"):
+                    stream.close()
+            self.check_cancel()
+            response = re.sub(r"<think>.*?</think>", "", "".join(parts), flags=re.S).strip()
             try:
                 parsed = self.parse_response(response)
             except ValueError as exc:
                 observation = {"ok": False, "error": str(exc), "raw": response}
                 messages.extend([{"role": "assistant", "content": response},
-                                 {"role": "user", "content": "Observation: " + json.dumps(observation)}])
+                                 {"role": "user", "content": "Observation: " + json.dumps(observation)[:10000]}])
                 self._emit(stream_callback, {"type": "observation",
                                              "iteration": iteration,
                                              "observation": observation})
                 continue
             if parsed["type"] == "final":
+                if self.verify_final:
+                    failure = self.verify_final(parsed['content'])
+                    self.check_cancel()
+                    if failure:
+                        observation = {'ok': False, 'error': failure}
+                        observations.append(observation)
+                        self._emit(stream_callback, {'type': 'observation', 'iteration': iteration, 'tool': 'final_verification', 'observation': observation})
+                        messages.extend([{'role': 'assistant', 'content': response}, {'role': 'user', 'content': 'Verification failed. Continue working: ' + json.dumps(failure)[:8000]}])
+                        continue
                 event = {"type": "final", "iteration": iteration,
                          "content": parsed["content"]}
                 self._emit(stream_callback, event)
@@ -92,6 +128,11 @@ class AutonomousAgent:
             action_event = {"type": "action", "iteration": iteration,
                             "tool": parsed["tool"], "args": parsed["args"]}
             self._emit(stream_callback, action_event)
+            if not isinstance(parsed["args"], dict):
+                raise ValueError("Tool arguments must be an object")
+            # Approval belongs to application state, never model-produced arguments.
+            for key in ("confirm", "force", "confirmation_token", "confirmed", "confirmationToken"):
+                parsed["args"].pop(key, None)
             command = parsed["args"].get("command", "") if parsed["tool"] == "execute_command" else ""
             try:
                 if command and is_catastrophic(command):
@@ -108,24 +149,32 @@ class AutonomousAgent:
                     self.auto_approve or parsed["args"].get("confirm", False)
                 ))
                 caller = self.tool_call or self.engine.call_tool
+                self.check_cancel()
                 result = caller(parsed["tool"], **parsed["args"])
+                self.check_cancel()
                 observation = {"ok": True, "result": result}
-                if parsed["tool"] in {"apply_edit", "write_file", "edit_file"} or (
+                if self.workspace_root is not None and (parsed["tool"] in {"apply_edit", "write_file", "edit_file"} or (
                     isinstance(result, dict) and result.get("modified_files")
-                ):
+                )):
                     observation["tests"] = self._run_post_edit_tests()
+            except AgentStopped:
+                raise
             except Exception as exc:
                 observation = {"ok": False, "error": str(exc)}
             observations.append(observation)
             self._emit(stream_callback, {"type": "observation", "iteration": iteration,
                                          "tool": parsed["tool"], "observation": observation})
             messages.extend([{"role": "assistant", "content": response},
-                             {"role": "user", "content": "Observation: " + json.dumps(observation)}])
+                             {"role": "user", "content": "Observation: " + json.dumps(observation)[:10000]}])
         answer = "I reached the maximum number of steps before completing the goal."
         self._emit(stream_callback, {"type": "final", "content": answer,
                                      "limited": True, "iteration": self.max_iterations})
         return {"status": "limited", "answer": answer,
                 "iterations": self.max_iterations, "observations": observations}
+
+    def check_cancel(self):
+        if self.cancel is not None and self.cancel.is_set():
+            raise AgentStopped("Task cancelled. Completed outputs are preserved.")
 
     @staticmethod
     def _emit(callback: Optional[Any], event: Dict[str, Any]):

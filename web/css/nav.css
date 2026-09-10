@@ -48,3 +48,5 @@ main { max-width: none; padding: 27px clamp(20px, 5vw, 80px) 20px; }
 .palette-command small { color: var(--faint); }
 @media (max-width: 850px) { .sidebar { width: 220px; } .topbar-actions .status-badge { display: none; } .mode-nav { width: 100%; overflow-x: auto; } }
 @media (max-width: 650px) { body { display: block; } .sidebar { width: 100%; border-right: 0; border-bottom: 1px solid var(--line); padding: 14px; } .new { margin: 14px 0 10px; } #history { max-height: 90px; } main { padding: 18px 14px; } .topbar { align-items: flex-start; } .topbar h1 { font-size: 22px; } .topbar-actions .icon-button, .topbar-actions .subtle { display: none; } .engine-actions { flex-wrap: wrap; justify-content: flex-end; } .model-compact select { min-width: 120px; } }
+
+.auto-toggle[hidden]{display:none!important}

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import mimetypes
 import re
+import json
+from .documents import extract
 import uuid
 from email.parser import BytesParser
 from email.policy import default
@@ -53,19 +55,29 @@ class Uploader:
             raise ValueError("Invalid upload destination.")
         destination.write_bytes(data)
         mime = part.get_content_type() or mimetypes.guess_type(filename)[0] or "application/octet-stream"
-        return {
+        manifest = {
             "id": ident,
             "filename": filename,
             "filepath": str(destination.relative_to(self.root.parent.parent)),
             "size_bytes": len(data),
             "mime_type": mime,
             "url": f"/api/uploads/{ident}",
+            "extraction": extract(destination),
         }
+        (self.root / (ident + '.metadata')).write_text(json.dumps(manifest), encoding='utf-8')
+        return {**manifest, 'extraction': {k: v for k, v in manifest['extraction'].items() if k != 'passages'}}
 
     def find(self, ident: str) -> Path:
         if not re.fullmatch(r"[0-9a-f]{32}", ident):
             raise ValueError("Invalid upload ID.")
-        matches = list(self.root.glob(ident + ".*"))
+        matches = [p for p in self.root.glob(ident + ".*") if p.suffix != ".metadata"]
         if len(matches) != 1 or not matches[0].is_file() or matches[0].is_symlink():
             raise FileNotFoundError(ident)
         return matches[0]
+
+    def metadata(self, ident):
+        path = self.find(ident)
+        saved = self.root / (ident + '.metadata')
+        if saved.exists():
+            return json.loads(saved.read_text(encoding='utf-8'))
+        return {'id': ident, 'filename': path.name, 'extraction': extract(path)}

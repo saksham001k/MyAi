@@ -9,8 +9,7 @@
     ["Code", "Switch to Code", () => switchMode("code")],
     ["Studio", "Open image generation", () => switchMode("image")],
     ["Docs", "Open document workspace", () => switchMode("docs")],
-    ["Autonomous agent", "Run a multi-step goal", () => switchMode("agent")],
-    ["Auto-approve actions", "Toggle autonomous execution approval", () => { const input = byId("auto-approve"); input.checked = !input.checked; input.dispatchEvent(new Event("change")); }],
+    ["Tasks", "Work on a project or research a topic", () => switchMode("agent")],
     ["Clear conversation", "Start a fresh conversation", () => byId("new-chat").click()],
     ["Export markdown", "Download the active conversation", () => byId("export").click()]
   ];
@@ -30,11 +29,17 @@
     });
   }
   function open() { render(); palette.hidden = false; search.value = ""; search.focus(); }
-  function close() { palette.hidden = true; }
+  function close() { palette.hidden = true; byId("palette-open").focus(); }
   byId("palette-open").onclick = open;
   document.querySelectorAll("[data-palette-close]").forEach(node => node.onclick = close);
   search.oninput = () => render(search.value);
   document.addEventListener("keydown", event => {
+    if(event.key === "Tab" && !palette.hidden){
+      const focusable = [...palette.querySelectorAll('button,input')];
+      const first = focusable[0], last = focusable[focusable.length-1];
+      if(event.shiftKey && document.activeElement === first){event.preventDefault();last.focus();}
+      else if(!event.shiftKey && document.activeElement === last){event.preventDefault();first.focus();}
+    }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); open(); }
     if (event.key === "Escape" && !palette.hidden) close();
   });

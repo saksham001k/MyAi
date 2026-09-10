@@ -49,12 +49,7 @@ program
   .option("--max-steps <number>", "maximum agent steps", "10")
   .action(async (goal: string, options: { maxSteps: string }) => {
     const provider = new OllamaProvider();
-    const model = {
-      generate: async (prompt: string) => provider.generatePatch(prompt, {
-        filePath: "agent.ts", name: "task", kind: "SourceFile",
-        startLine: 0, endLine: 0, source: ""
-      }, "")
-    };
+    const model = provider;
     const worktree = new IsolatedWorktree(process.cwd(), `task-${Date.now()}`);
     let created = false;
     const io = terminalReviewIO();
@@ -64,18 +59,19 @@ program
       let currentGoal = goal;
       for (;;) {
         const loop = new AgentLoop(model, createAgentTools(workspace), {
+          workspaceRoot: workspace,
           maxSteps: Number(options.maxSteps),
           onEvent: (event) => console.log(chalk.cyan(`[${event.type}] ${event.content}`))
         });
         const result = await loop.run(currentGoal);
         if (!result.success) {
           console.log(chalk.red(result.answer));
-          await worktree.discard();
+          console.log(`Working copy preserved at ${workspace}. Review or remove it manually when ready.`);
           created = false;
           break;
         }
         const decision = await reviewWorktree(worktree, io, {
-          accept: async () => worktree.acceptAndMerge(),
+          accept: async () => worktree.applyReviewed(),
           discard: async () => worktree.discard(),
           retry: async (feedback) => { currentGoal = `${goal}\nReviewer feedback: ${feedback}`; }
         });
@@ -85,7 +81,8 @@ program
         }
       }
     } finally {
-      if (created) await worktree.discard();
+      if (created) console.log(`Interrupted work preserved at ${worktree.path}.`);
+      io.close?.();
     }
   });
 

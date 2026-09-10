@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0a0c10">
-  <title>KISS — Offline AI Workspace</title>
+  <title>MyAi · Your local assistant</title>
   <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/layout.css">
   <link rel="stylesheet" href="/css/nav.css">
   <link rel="stylesheet" href="/css/chat.css">
@@ -19,11 +20,12 @@
   <script src="/js/nav.js" defer></script>
   <script src="/js/chat.js" defer></script>
   <script src="/app.js" defer></script>
+  <script src="/js/tasks.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <aside class="sidebar" aria-label="Workspace navigation">
-    <a class="brand" href="/" aria-label="KISS home"><img src="/logo.svg" alt="KISS" width="140" height="32"><span class="version">LOCAL</span></a>
+    <a class="brand" href="/" aria-label="MyAi home"><strong>MyAi</strong><span class="version">LOCAL</span></a>
     <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-expanded="true">‹</button>
     <button id="new-chat" class="new" type="button"><span aria-hidden="true">＋</span> New conversation</button>
     <label class="search-label" for="search">Conversations</label>
@@ -34,7 +36,7 @@
 
   <main id="main-content">
     <header class="topbar">
-      <div class="topbar-title"><span class="eyebrow">YOUR PRIVATE WORKSPACE</span><h1 id="chat-title">A little space for big ideas.</h1></div>
+      <div class="topbar-title"><span class="eyebrow">YOUR PRIVATE WORKSPACE</span><h1 id="chat-title">What would you like to get done?</h1></div>
       <div class="topbar-actions">
         <span id="hardware-badge" class="status-badge" title="Detected local acceleration">◌ Detecting hardware</span>
         <button id="palette-open" class="icon-button" type="button" aria-label="Open command palette" title="Command palette (⌘K)">⌘K</button>
@@ -48,14 +50,15 @@
       <button data-workspace="code" class="mode-tab" type="button"><span>Code</span><kbd>2</kbd></button>
       <button data-workspace="image" class="mode-tab" type="button"><span>Studio</span><kbd>3</kbd></button>
       <button data-workspace="docs" class="mode-tab" type="button"><span>Docs</span><kbd>4</kbd></button>
-      <button data-workspace="agent" class="mode-tab" type="button"><span>Autonomous agent</span><kbd>5</kbd></button>
+      <button data-workspace="agent" class="mode-tab" type="button"><span>Tasks</span><kbd>5</kbd></button>
     </nav>
 
     <section class="engine-bar" aria-label="Model status">
       <span id="engine-status" role="status"><span class="status-dot"></span> Checking workspace…</span>
       <div class="engine-actions">
         <label class="model-compact">Model<select id="model"><option value="">No models yet</option></select></label>
-        <label class="auto-toggle"><input id="auto-approve" type="checkbox"><span class="toggle-track" aria-hidden="true"></span><span>Auto-approve</span></label>
+        <label class="auto-toggle" hidden><input id="auto-approve" type="checkbox"><span class="toggle-track" aria-hidden="true"></span><span>Auto-approve</span></label>
+        <button id="quick-load" class="primary" type="button">Load selected model</button>
         <button id="settings-toggle" class="subtle" type="button" aria-expanded="false" aria-controls="settings" aria-label="Open settings">⚙ Settings</button>
       </div>
     </section>
@@ -64,12 +67,27 @@
       <div class="settings-heading"><div><h2>Model controls</h2><p>Keep inference local. Tune the runtime for this machine.</p></div><span class="settings-kicker">LOCAL RUNTIME</span></div>
       <div class="controls">
         <label>Context<select id="context"><option>2048</option><option selected>4096</option><option>8192</option><option>16384</option></select></label>
-        <label>Acceleration<select id="gpu"><option value="0">CPU · compatible</option><option value="999">GPU · if supported</option></select></label>
+        <label>Acceleration<select id="gpu"><option value="auto" selected>Automatic · recommended</option><option value="0">CPU · compatible</option><option value="999">GPU · if supported</option></select></label>
         <button id="load" class="primary" type="button">Load model</button><button id="unload" class="subtle" type="button">Unload</button>
       </div>
       <p id="setup-hint" class="hint">Checking local files…</p>
+      <details><summary>Personal response preferences</summary><label>How should MyAi answer?<textarea id="personal-instructions" maxlength="4000" rows="2" placeholder="For example: explain in simple Hinglish, be concise, give complete code."></textarea></label><div class="controls"><label>Maximum response tokens<select id="output-tokens"><option>512</option><option>1024</option><option selected>2048</option><option>4096</option><option>8192</option></select></label><button id="save-preferences" type="button">Save locally</button></div><p class="local-note">No message quota. Response length is bounded by the chosen model's available context and memory.</p></details>
     </section>
 
+    <section id="task-panel" class="task-panel" hidden>
+      <h2>Give MyAi a task</h2>
+      <p class="task-intro">Use your loaded local model to work on a project or research the web. No AI account, credits or paid API required. Reports and working copies stay on this computer.</p>
+      <form id="task-form" class="task-form">
+        <div class="task-row"><label>Work type<select id="task-kind"><option value="project">Work on a project</option><option value="research">Research and save a report · internet needed</option></select></label><label>Step budget<select id="task-steps"><option>6</option><option selected>12</option><option>20</option><option>50</option></select></label></div>
+        <div id="task-project-options" class="task-row"><label>Project folder on this computer<input id="task-project" placeholder="/Users/you/Projects/my-project" autocomplete="off"></label></div>
+        <label>Your goal<textarea id="task-goal" required maxlength="16000" rows="3"></textarea></label>
+        <div id="task-command-options"><label><input id="task-allow-commands" type="checkbox"> Allow commands for this trusted project</label><p class="local-note">File edits use a source-only copy. Commands run as your OS user and can access the host; this is not an OS sandbox. Enable only for projects and task instructions you trust. Model/data folders, credentials and ignored files are excluded from the copy.</p><div class="task-row"><label>Test command (optional)<input id="task-test" disabled placeholder="python3 -m unittest discover -s tests"></label></div></div>
+        <div class="task-buttons"><button id="task-start" type="submit" class="primary">Start local task</button><span class="local-note">Load a model above first. Review changes before applying.</span></div>
+      </form>
+      <p id="task-error" role="alert" class="notice" hidden></p>
+      <div class="task-layout"><nav id="task-list" class="task-list" aria-label="Saved tasks"></nav><section id="task-result" class="task-result" aria-label="Task result" hidden></section></div>
+    </section>
+    <p id="docs-note" class="task-document-note" hidden>Attach text files or text-based PDFs, then ask a question. MyAi uses extracted passages and cites filenames/pages. Scanned PDFs need OCR; images are stored only.</p>
     <section id="studio" data-mode-view="studio" hidden>
       <div class="studio-heading"><div><span class="eyebrow">GENERATIVE STUDIO</span><h2>Make something new.</h2><p id="studio-hint"></p></div><span class="studio-chip">LOCAL DIFFUSION</span></div>
       <div class="studio-mode-switch" role="tablist" aria-label="Studio workflow"><button id="text-to-image" class="studio-mode active" type="button" role="tab" aria-selected="true">Text-to-Image</button><button id="image-to-image" class="studio-mode" type="button" role="tab" aria-selected="false">Image-to-Image / Edit</button></div>
@@ -103,7 +121,7 @@
     <section id="file-ingestion" class="file-ingestion" aria-label="Uploaded files" hidden>
       <div id="file-chips" class="file-chips"></div>
     </section>
-    <section id="messages" aria-label="Messages" aria-live="polite"><div class="welcome"><div class="spark">✦</div><p class="eyebrow">PRIVATE, LOCAL, YOURS</p><h2>What’s on your mind?</h2><p>Ask a question, shape an idea, or give the agent a goal.<br>Everything stays in this workspace.</p><div class="suggestions"><button data-prompt="Explain a difficult concept using a simple example." type="button"><span>UNDERSTAND</span>Make something complex feel simple <b>↗</b></button><button data-prompt="Help me break my project into a practical step-by-step plan." type="button"><span>CREATE</span>Turn an idea into a clear plan <b>↗</b></button><button data-prompt="Help me debug my code. Ask me for the code and the error first." type="button"><span>BUILD</span>Work through a coding problem <b>↗</b></button></div></div></section>
+    <section id="messages" aria-label="Messages" aria-live="polite"><div class="welcome"><div class="spark">✦</div><p class="eyebrow">PRIVATE, LOCAL, YOURS</p><h2>What’s on your mind?</h2><p>Ask a question, shape an idea, or open Tasks to get work done.<br>Local inference · No account or credits required.</p><div class="suggestions"><button data-prompt="Explain a difficult concept using a simple example." type="button"><span>UNDERSTAND</span>Make something complex feel simple <b>↗</b></button><button data-prompt="Help me break my project into a practical step-by-step plan." type="button"><span>CREATE</span>Turn an idea into a clear plan <b>↗</b></button><button data-prompt="Help me debug my code. Ask me for the code and the error first." type="button"><span>BUILD</span>Work through a coding problem <b>↗</b></button></div></div></section>
     <button id="scroll-bottom" class="scroll-bottom" type="button" hidden>↓ Newest message</button>
     <footer><form id="composer"><div id="upload-chips" class="file-chips"></div><label class="sr-only" for="prompt">Message MyAi</label><input id="global-file-input" type="file" multiple hidden accept=".png,.jpg,.jpeg,.webp,.gif,.py,.js,.ts,.html,.css,.json,.md,.pdf,.txt,.csv"><textarea id="prompt" name="prompt" list="file-suggestions" rows="2" maxlength="16000" placeholder="Ask anything. Keep it yours." required></textarea><datalist id="file-suggestions"></datalist><div class="composer-bottom"><button id="attach-file" type="button" class="icon-button" aria-label="Attach file" title="Attach file">📎</button><span id="composer-hint">Load a model to begin · Shift+Enter for a new line</span><button type="button" id="stop" class="subtle" hidden>Stop</button><button id="send" class="primary" type="submit" disabled>Send <span aria-hidden="true">↗</span></button></div></form><p class="footnote">Local AI can make mistakes. Check important answers.</p></footer>
   </main>

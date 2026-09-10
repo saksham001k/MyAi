@@ -33,6 +33,7 @@
   function accept(file) {
     if (!file) return;
     const kind = context();
+    if (kind !== "image") return; // Non-Studio uploads use the single authenticated uploader.
     const image = ["image/png", "image/jpeg", "image/webp"].includes(file.type);
     const documentFile = file.type === "application/pdf" || file.type.startsWith("text/");
     if (kind === "image" && (!image || file.size > maxImageBytes)) return window.showToast?.("Choose a PNG, JPG, JPEG, or WebP image up to 20 MB.", "error");

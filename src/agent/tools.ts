@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { inside, permitted, excluded } from "../guardrails/paths.js";
 import { extractSymbolAtLocation } from "../indexer/slicer.js";
 import { patchFileRange } from "../tools/filePatcher.js";
 import { ProcessSandbox, type ProcessResult } from "../engine/sandbox.js";
@@ -31,10 +32,11 @@ async function walk(root: string, directory = root): Promise<string[]> {
   const entries = await fs.readdir(directory, { withFileTypes: true });
   const results: string[] = [];
   for (const entry of entries) {
-    if ([".git", "node_modules", "dist", ".venv"].includes(entry.name)) continue;
+    if (excluded.has(entry.name) || entry.isSymbolicLink() || !permitted(entry.name)) continue;
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) results.push(...await walk(root, absolute));
-    else results.push(path.relative(root, absolute));
+    else if (entry.isFile() && (await fs.stat(absolute)).size <= 200_000 && /\.(ts|tsx|js|jsx|py|md|txt|json|html|css|toml|ya?ml)$/.test(entry.name)) results.push(path.relative(root, absolute));
+    if (results.length > 500) throw new Error("Project exceeds the source search budget.");
   }
   return results;
 }
@@ -64,11 +66,7 @@ function tokenize(command: string): string[] {
 
 export function createAgentTools(workspaceRoot: string, sandbox = new ProcessSandbox()): AgentTool[] {
   const root = path.resolve(workspaceRoot);
-  const resolveInside = (file: string): string => {
-    const resolved = path.resolve(root, file);
-    if (!resolved.startsWith(`${root}${path.sep}`)) throw new Error("Path must remain inside the workspace.");
-    return resolved;
-  };
+  const resolveInside = (file: string) => inside(root, file);
   return [
     {
       schema: {
@@ -80,7 +78,7 @@ export function createAgentTools(workspaceRoot: string, sandbox = new ProcessSan
         }
       },
       async execute(args) {
-        const context = extractSymbolAtLocation(resolveInside(stringArg(args, "filePath")), numberArg(args, "line"));
+        const context = extractSymbolAtLocation(await resolveInside(stringArg(args, "filePath")), numberArg(args, "line"));
         return context ?? { found: false };
       }
     },
@@ -101,7 +99,7 @@ export function createAgentTools(workspaceRoot: string, sandbox = new ProcessSan
             pattern.lastIndex = 0;
           });
         }
-        return matches;
+        return matches.slice(0, 100);
       }
     },
     {
@@ -118,7 +116,7 @@ export function createAgentTools(workspaceRoot: string, sandbox = new ProcessSan
       async execute(args) {
         return {
           applied: await patchFileRange(
-            resolveInside(stringArg(args, "filePath")),
+            await resolveInside(stringArg(args, "filePath")),
             numberArg(args, "startLine"),
             numberArg(args, "endLine"),
             stringArg(args, "replacementText")

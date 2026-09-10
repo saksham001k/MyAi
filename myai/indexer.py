@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import ast
 import re
+import os
+from .project import EXCLUDED, allowed, confined
 from pathlib import Path
 
 
@@ -13,9 +15,18 @@ class WorkspaceIndexer:
     def scan(self, query: str = "") -> list[dict]:
         query = (query or "").lower()
         entries = []
-        for path in self.root.rglob("*"):
-            if not path.is_file() or any(part in {".git", ".venv", "node_modules", ".kiss"} for part in path.parts):
-                continue
+        candidates = []
+        for directory, dirs, names in os.walk(self.root, followlinks=False):
+            dirs[:] = sorted(d for d in dirs if d not in EXCLUDED and not (Path(directory) / d).is_symlink())
+            for name in sorted(names):
+                path = Path(directory) / name
+                if allowed(path.relative_to(self.root).as_posix()) and not path.is_symlink():
+                    candidates.append(path)
+                if len(candidates) >= 500:
+                    break
+            if len(candidates) >= 500:
+                break
+        for path in candidates:
             rel = path.relative_to(self.root).as_posix()
             if rel.startswith("data/") and not rel.startswith("data/workbench/files/"):
                 continue
@@ -40,7 +51,7 @@ class WorkspaceIndexer:
     def mention_context(self, names: list[str]) -> str:
         chunks = []
         for name in dict.fromkeys(names):
-            path = (self.root / name).resolve()
+            path = confined(self.root, name)
             if not path.is_relative_to(self.root) or not path.is_file() or path.stat().st_size > 60_000:
                 raise ValueError(f"Cannot attach file: {name}")
             chunks.append(f"--- {name} ---\n{path.read_text(encoding='utf-8')}")

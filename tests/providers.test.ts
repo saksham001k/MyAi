@@ -50,3 +50,19 @@ describe("LLM providers", () => {
     expect(stripPatchFences("Explanation\nfunction add() {}")).toBe("function add() {}");
   });
 });
+
+it('keeps agent prompts free of replacement-code instructions', async () => {
+  const fetchImpl=vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(new Response(JSON.stringify({models:[{name:'qwen2.5-coder:1.5b'}]})))
+    .mockResolvedValueOnce(new Response(JSON.stringify({response:'{"final":"done"}'})));
+  const provider=new OllamaProvider({fetchImpl});
+  expect(await provider.generate('Use JSON tool calls.')).toBe('{"final":"done"}');
+  const body=JSON.parse(fetchImpl.mock.calls[1][1]?.body as string);
+  expect(body.prompt).toBe('Use JSON tool calls.');
+  expect(body.format).toBe('json');
+});
+
+it('does not silently switch to an unrelated installed model', async () => {
+  const fetchImpl=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({models:[{name:'unrelated'}]})));
+  await expect(new OllamaProvider({fetchImpl}).generate('task')).rejects.toThrow('not installed');
+});

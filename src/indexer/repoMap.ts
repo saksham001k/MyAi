@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { excluded } from "../guardrails/paths.js";
 
 export interface RepoMapOptions {
   root?: string;
@@ -12,7 +13,7 @@ async function files(root: string, directory = root): Promise<string[]> {
   const entries = await fs.readdir(directory, { withFileTypes: true });
   const result: string[] = [];
   for (const entry of entries) {
-    if (entry.name.startsWith(".") || ignored.has(entry.name)) continue;
+    if (entry.name.startsWith(".") || ignored.has(entry.name) || excluded.has(entry.name) || entry.isSymbolicLink()) continue;
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) result.push(...await files(root, absolute));
     else if (/\.(ts|tsx)$/.test(entry.name)) result.push(absolute);

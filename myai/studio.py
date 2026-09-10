@@ -5,7 +5,7 @@ import io
 import re
 from pathlib import Path
 
-from PIL import Image, UnidentifiedImageError
+
 
 
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
@@ -31,6 +31,10 @@ def preprocess_image(data_url, destination, target_size=768):
     """Validate, center-crop, and save an image at a diffusion-safe size."""
     if type(target_size) is not int or target_size not in (512, 768, 1024):
         raise ValueError("Image target size must be 512, 768, or 1024.")
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except ImportError as exc:
+        raise ValueError("Image editing needs Pillow. Run scripts/setup_local.py first.") from exc
     data = _decode_data_url(data_url)
     try:
         with Image.open(io.BytesIO(data)) as source:

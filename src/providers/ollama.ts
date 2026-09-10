@@ -52,11 +52,7 @@ export class OllamaProvider implements LLMProvider {
     errorTrace: string
   ): Promise<string> {
     if (!(await this.hasModel(this.model))) {
-      const models = await this.listModels();
-      if (models.length === 0) {
-        throw new Error(`No Ollama models installed. Run 'ollama run ${DEFAULT_MODEL}' to start your free local brain.`);
-      }
-      this.model = models[0];
+      throw new Error(`Selected model ${this.model} is not installed. Choose an installed model explicitly; MyAi will not silently switch models.`);
     }
     const response = await this.fetchImpl(`${this.host}/api/generate`, {
       method: "POST",
@@ -73,6 +69,19 @@ export class OllamaProvider implements LLMProvider {
       throw new Error("Ollama returned no patch text.");
     }
     return stripPatchFences(payload.response);
+  }
+
+  public async generate(prompt: string): Promise<string> {
+    if (!(await this.hasModel(this.model))) throw new Error(`Selected local model ${this.model} is not installed.`);
+    const response = await this.fetchImpl(`${this.host}/api/generate`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(180_000),
+      body: JSON.stringify({model: this.model, prompt, stream: false, format: "json", options: {temperature: 0.1, num_predict: 2048}})
+    });
+    if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}.`);
+    const value = await response.json() as {response?: unknown};
+    if (typeof value.response !== "string") throw new Error("Local model returned no agent response.");
+    return value.response;
   }
 
   public async isAvailable(): Promise<boolean> {
