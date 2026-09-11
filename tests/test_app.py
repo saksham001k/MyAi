@@ -19,6 +19,9 @@ class FakeEngine:
         self.fail = False
         self.seen = None
         self.cancel = None
+        self.hardware = None
+        self.context_size = 4096
+        self.last_metrics = None
 
     def status(self):
         return {"running": self.running, "model": "test.gguf", "runtime_found": True, "platform": "test"}
@@ -33,7 +36,7 @@ class FakeEngine:
     def stop(self):
         self.running = False
 
-    def stream(self, messages, temperature):
+    def stream(self, messages, temperature, max_tokens=1024, **kwargs):
         self.seen = messages
         yield "Hello "
         if self.fail:
@@ -41,6 +44,12 @@ class FakeEngine:
         if self.cancel:
             self.cancel.set()
         yield "नमस्ते 🌱"
+
+    def calibrate(self, prompt="Reply with exactly: ok"):
+        return {"measured": False, "calibration": True, "source": None,
+                "token_events": 0, "time_to_first_token_ms": None,
+                "tokens_per_second": None,
+                "note": "Protocol fixture; not a real-model measurement."}
 
 
 class ServerTests(unittest.TestCase):
@@ -144,6 +153,39 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(len(state["presets"]), 3)
         self.assertEqual(self.request("/api/media/start", {"preset": "sd15", "prompt": "cat"})[0], 400)
         self.assertEqual(self.request("/api/media/result/invalid")[0], 404)
+
+    def test_catalog_status_retry_and_documents(self):
+        status, body = self.request("/api/status")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertIn("memory", payload)
+        self.assertIn("recommendation", payload)
+        catalog = json.loads(self.request("/api/catalog")[1])
+        self.assertTrue(catalog["models"])
+        self.assertTrue(all("license" in m for m in catalog["models"]))
+        self.assertEqual(self.request("/api/docs.js")[0], 404)
+        self.assertEqual(self.request("/js/docs.js", authorized=False)[0], 200)
+        self.assertEqual(self.request("/api/engine/calibrate", {})[0], 200)
+        cid = self.chat()
+        self.engine.fail = True
+        self.request("/api/generate", {"chat_id": cid, "prompt": "Hi"})
+        self.assertEqual(self.app.store.get(cid)["messages"][-1]["status"], "error")
+        self.engine.fail = False
+        status, body = self.request("/api/generate", {"chat_id": cid, "retry": True})
+        self.assertEqual(status, 200)
+        events = [json.loads(line) for line in body.splitlines()]
+        self.assertTrue(any(e.get("context") for e in events))
+        messages = self.app.store.get(cid)["messages"]
+        self.assertEqual(sum(1 for m in messages if m["role"] == "user"), 1)
+        self.assertEqual(messages[-1]["status"], "complete")
+        status, body = self.request("/api/generate", {"chat_id": cid, "regenerate": True})
+        self.assertEqual(status, 200)
+        self.assertEqual(sum(1 for m in self.app.store.get(cid)["messages"] if m["role"] == "user"), 1)
+        created = json.loads(self.request("/api/documents", {"name": "note.txt", "content": "GGUF files stay in the models folder."})[1])
+        self.assertEqual(created["pages"], 1)
+        hits = json.loads(self.request("/api/documents/search?q=models")[1])["passages"]
+        self.assertTrue(hits)
+        self.assertIn("models folder", hits[0]["text"])
 
 
 class PortableStorageTests(unittest.TestCase):

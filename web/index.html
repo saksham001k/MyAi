@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/css/chat.css">
   <link rel="stylesheet" href="/css/studio.css">
   <link rel="stylesheet" href="/css/progress.css">
+  <link rel="stylesheet" href="/css/docs.css">
   <script src="/js/toast.js" defer></script>
   <script src="/js/file_ingestion.js" defer></script>
   <script src="/js/uploader.js" defer></script>
@@ -18,6 +19,7 @@
   <script src="/js/progress_manager.js" defer></script>
   <script src="/js/nav.js" defer></script>
   <script src="/js/chat.js" defer></script>
+  <script src="/js/docs.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -37,6 +39,7 @@
       <div class="topbar-title"><span class="eyebrow">YOUR PRIVATE WORKSPACE</span><h1 id="chat-title">A little space for big ideas.</h1></div>
       <div class="topbar-actions">
         <span id="hardware-badge" class="status-badge" title="Detected local acceleration">◌ Detecting hardware</span>
+        <span id="metrics-badge" class="status-badge" title="Last measured generation speed">No speed measurement yet</span>
         <button id="palette-open" class="icon-button" type="button" aria-label="Open command palette" title="Command palette (⌘K)">⌘K</button>
         <button id="export" class="subtle" type="button">Export ↓</button>
       </div>
@@ -66,8 +69,22 @@
         <label>Context<select id="context"><option>2048</option><option selected>4096</option><option>8192</option><option>16384</option></select></label>
         <label>Acceleration<select id="gpu"><option value="0">CPU · compatible</option><option value="999">GPU · if supported</option></select></label>
         <button id="load" class="primary" type="button">Load model</button><button id="unload" class="subtle" type="button">Unload</button>
+        <button id="calibrate" class="subtle" type="button">Measure speed</button>
       </div>
       <p id="setup-hint" class="hint">Checking local files…</p>
+      <p id="memory-hint" class="hint">Measuring available memory…</p>
+      <div class="catalog">
+        <div class="settings-heading"><div><h2>Verified catalog</h2><p>Publisher licenses and checksums. Downloads resume if interrupted.</p></div></div>
+        <div id="catalog-list"></div>
+        <p id="download-status" class="hint" hidden></p>
+      </div>
+    </section>
+
+    <section id="docs-panel" data-mode-view="docs" hidden>
+      <div class="docs-heading"><div><span class="eyebrow">LOCAL DOCUMENTS</span><h2>Ask over files you added.</h2><p>Text, Markdown, and simple text-based PDFs stay in this workspace. Answers cite passages. Scanned PDFs are not extracted.</p></div></div>
+      <div class="controls"><label>Add document<input id="doc-files" type="file" multiple accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"></label></div>
+      <div id="doc-library"></div>
+      <p id="doc-hint" class="hint">Add a document, then ask a question. Citations appear above the answer when retrieval finds overlapping passages.</p>
     </section>
 
     <section id="studio" data-mode-view="studio" hidden>

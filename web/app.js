@@ -19,7 +19,7 @@ async function api(path, method = "GET", body) {
 }
 function setBusy(value) {
   busy = value;
-  for (const id of ["load", "unload", "new-chat", "model", "context", "gpu", "export"]) $(id).disabled = value;
+  for (const id of ["load", "unload", "new-chat", "model", "context", "gpu", "export", "calibrate"]) $(id).disabled = value;
   $("send").disabled = value || !running;
   $("prompt").disabled = value;
 }
@@ -40,9 +40,86 @@ async function refresh() {
     const vram = state.hardware.vram_mb ? ` · ${Math.round(state.hardware.vram_mb / 1024)} GB VRAM` : "";
     $("hardware-badge").textContent = `${labels[state.hardware.backend] || state.hardware.backend}${vram}`;
   }
-  $("setup-hint").textContent = !state.runtime_found ? `Setup: put llama-server and its companion libraries in runtime/${state.platform}/. See docs/SETUP.md.` : !state.models.length ? "Add a compatible .gguf file to the models folder, then reload this page." : "Start with CPU and 4096 context. GPU mode needs a matching runtime. Larger context uses more memory.";
+  if (state.memory) {
+    const avail = state.memory.available_mb != null ? `${Math.round(state.memory.available_mb / 1024 * 10) / 10} GiB available` : "available RAM unknown";
+    const total = state.memory.total_mb != null ? `${Math.round(state.memory.total_mb / 1024 * 10) / 10} GiB total` : "";
+    const rec = state.recommendation;
+    $("memory-hint").textContent = `Memory (${state.memory.source}): ${avail}${total ? " · " + total : ""}. ${rec && rec.reason ? rec.reason : ""}`;
+    window.lastRecommendation = rec;
+  }
+  renderMetrics(state.metrics);
+  $("setup-hint").textContent = !state.runtime_found ? `Setup: put llama-server and its companion libraries in runtime/${state.platform}/. See docs/SETUP.md. Protocol tests are not real GGUF inference.` : !state.models.length ? "Add a compatible .gguf file to models/, import one, or download from the catalog below." : "Start with the recommended context if shown. GPU mode needs a matching runtime. Larger context uses more memory.";
   $("composer-hint").textContent = running ? "Local only · Enter to send · Shift+Enter for a new line" : "Load a model to begin · Shift+Enter for a new line";
   $("send").disabled = busy || !running;
+  refreshCatalog().catch(() => {});
+}
+async function refreshCatalog() {
+  const box = $("catalog-list");
+  if (!box) return;
+  const catalog = await (await api("/api/catalog")).json();
+  box.replaceChildren();
+  const rec = document.createElement("p");
+  rec.className = "hint";
+  rec.textContent = catalog.disclaimer || "";
+  box.append(rec);
+  if (window.lastRecommendation && window.lastRecommendation.filename) {
+    const apply = document.createElement("button");
+    apply.type = "button"; apply.className = "subtle";
+    apply.textContent = `Use recommendation (${window.lastRecommendation.filename}, ctx ${window.lastRecommendation.context || "?"})`;
+    apply.onclick = () => {
+      const recn = window.lastRecommendation;
+      if ([...$("model").options].some(o => o.value === recn.filename)) $("model").value = recn.filename;
+      if (recn.context) $("context").value = String(recn.context);
+      if (recn.backend === "cpu") $("gpu").value = "0";
+      else if (recn.gpu_layers != null) $("gpu").value = recn.gpu_layers >= 999 ? "999" : "999";
+    };
+    box.append(apply);
+  }
+  for (const model of catalog.models) {
+    const row = document.createElement("div"); row.className = "catalog-row";
+    const title = document.createElement("strong"); title.textContent = model.name;
+    const meta = document.createElement("small");
+    meta.textContent = `${model.license} · ${model.sha256 ? "pinned SHA-256" : "publisher SHA-256 at download"} · ${model.installed ? "installed" : "not installed"} · min ~${model.min_ram_gb} GiB RAM`;
+    const license = document.createElement("a"); license.href = model.license_url; license.target = "_blank"; license.rel = "noopener"; license.textContent = "License";
+    row.append(title, meta, license);
+    if (model.downloadable && !model.installed) {
+      const button = document.createElement("button"); button.type = "button"; button.textContent = "Download";
+      button.onclick = () => startCatalogDownload(model.id);
+      row.append(button);
+    }
+    box.append(row);
+  }
+  for (const runtime of catalog.runtimes) {
+    const row = document.createElement("div"); row.className = "catalog-row";
+    const title = document.createElement("strong"); title.textContent = `Runtime ${runtime.executable} · ${runtime.tag}`;
+    const meta = document.createElement("small");
+    meta.textContent = `${runtime.license} · ${runtime.sha256 ? "pinned SHA-256" : "unverified"} · ${runtime.repo}`;
+    row.append(title, meta);
+    box.append(row);
+  }
+}
+let downloadPoll = null;
+async function startCatalogDownload(id) {
+  notice();
+  try {
+    await api("/api/catalog/download", "POST", {id});
+    pollDownload();
+  } catch (e) { notice(e.message); }
+}
+async function pollDownload() {
+  clearTimeout(downloadPoll);
+  try {
+    const state = await (await api("/api/catalog/download")).json();
+    $("download-status").hidden = state.status === "idle";
+    $("download-status").textContent = state.status === "downloading"
+      ? `Downloading ${state.filename || ""}… ${state.received || 0} bytes${state.total ? " / " + state.total : ""}`
+      : `${state.status}${state.error ? ": " + state.error : ""}`;
+    if (state.status === "downloading" || state.status === "starting") {
+      downloadPoll = setTimeout(pollDownload, 1000);
+    } else if (state.status === "complete") {
+      await refresh();
+    } else if (state.error) notice(state.error);
+  } catch (e) { notice(e.message); }
 }
 async function listChats() { chats = await (await api("/api/chats")).json(); renderHistory(); }
 function renderHistory() {
@@ -59,12 +136,46 @@ function renderHistory() {
     row.append(button, remove); $("history").append(row);
   }
 }
-function message(role, content, status = "complete") {
+function renderMetrics(metrics) {
+  if (!$("metrics-badge")) return;
+  if (!metrics || (!metrics.time_to_first_token_ms && !metrics.tokens_per_second)) {
+    $("metrics-badge").textContent = "No speed measurement yet";
+    $("metrics-badge").title = metrics && metrics.note ? metrics.note : "Run Measure speed after loading a model, or send a prompt.";
+    return;
+  }
+  const ttft = metrics.time_to_first_token_ms != null ? `${metrics.time_to_first_token_ms} ms to first token` : "";
+  const tps = metrics.tokens_per_second != null ? `${Number(metrics.tokens_per_second).toFixed(1)} tok/s` : "";
+  $("metrics-badge").textContent = [ttft, tps].filter(Boolean).join(" · ") || "Measured run (see note)";
+  $("metrics-badge").title = `${metrics.source || "unlabeled"} · ${metrics.note || "Measurement from this session, not a product claim."}`;
+}
+function message(role, content, status = "complete", options = {}) {
   const article = document.createElement("article"); article.className = `message ${role}`;
   const label = document.createElement("div"); label.className = "role"; label.textContent = role === "user" ? "YOU" : "MYAI";
   const text = document.createElement("div"); text.className = "content"; renderContent(text, content);
   article.append(label, text);
   if (status !== "complete") { const hint = document.createElement("small"); hint.textContent = `Response ${status}`; article.append(hint); }
+  if (role === "assistant") {
+    const actions = document.createElement("div"); actions.className = "message-actions";
+    if (status === "error" || status === "interrupted") {
+      const retry = document.createElement("button"); retry.className = "subtle"; retry.textContent = "Retry";
+      retry.onclick = () => sendPrompt({retry: true});
+      actions.append(retry);
+    } else if (status === "complete") {
+      const regen = document.createElement("button"); regen.className = "subtle"; regen.textContent = "Regenerate";
+      regen.onclick = () => sendPrompt({regenerate: true});
+      actions.append(regen);
+    }
+    if (options.metrics) {
+      const speed = document.createElement("small");
+      const m = options.metrics;
+      speed.textContent = [
+        m.time_to_first_token_ms != null ? `${m.time_to_first_token_ms} ms TTFT` : "",
+        m.tokens_per_second != null ? `${Number(m.tokens_per_second).toFixed(1)} tok/s (${m.source})` : ""
+      ].filter(Boolean).join(" · ");
+      if (speed.textContent) actions.append(speed);
+    }
+    if (actions.childNodes.length) article.append(actions);
+  }
   const copy = document.createElement("button"); copy.className = "copy"; copy.textContent = "Copy";
   copy.onclick = async () => { try { await navigator.clipboard.writeText(text.textContent); copy.textContent = "Copied"; } catch { notice("Select the response text to copy it."); } };
   article.append(copy); $("messages").append(article); return text;
@@ -97,19 +208,32 @@ $("load").onclick = async () => {
   catch(e) { notice(e.message); }
   finally { setBusy(false); await refresh().catch(e => notice(e.message)); }
 };
+$("calibrate").onclick = async () => {
+  notice(); setBusy(true);
+  try {
+    const result = await (await api("/api/engine/calibrate", "POST", {})).json();
+    renderMetrics(result);
+    notice(result.note || (result.measured === false ? "No real-model timings available." : "Measurement recorded for this loaded model."));
+  } catch(e) { notice(e.message); }
+  finally { setBusy(false); }
+};
 $("unload").onclick = async () => { setBusy(true); try { await api("/api/engine/stop", "POST", {}); await refresh(); } catch(e) { notice(e.message); } finally { setBusy(false); } };
 $("stop").onclick = async () => { try { await api("/api/cancel", "POST", {}); $("stop").textContent = "Stopping…"; $("stop").disabled = true; } catch(e) { notice(e.message); } };
 $("prompt").onkeydown = event => { if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!busy && running) $("composer").requestSubmit(); } };
-$("composer").onsubmit = async event => {
-  event.preventDefault(); const prompt = $("prompt").value.trim(); if (!prompt || busy || !running) return;
-  notice(); setBusy(true); let responseText = null, complete = false;
+$("composer").onsubmit = event => { event.preventDefault(); sendPrompt(); };
+async function sendPrompt(options = {}) {
+  const prompt = options.retry || options.regenerate ? " " : $("prompt").value.trim();
+  if ((!options.retry && !options.regenerate && !prompt) || busy || !running) return;
+  notice(); setBusy(true); let responseText = null, complete = false, lastMetrics = null;
   try {
     if (!active) { const chat = await (await api("/api/chats", "POST", {})).json(); active = chat.id; $("messages").replaceChildren(); }
-    message("user", prompt); responseText = message("assistant", ""); $("prompt").value = "";
+    if (!options.retry && !options.regenerate) { message("user", prompt); $("prompt").value = ""; }
+    responseText = message("assistant", "");
     progressManager.start(workspaceMode === "code" ? "code" : workspaceMode === "agent" ? "agent" : "chat");
     $("stop").hidden = false; $("stop").disabled = false; $("stop").textContent = "Stop response";
     const agentMode = workspaceMode === "agent";
-    const response = await api(agentMode ? "/api/agent/stream" : "/api/generate", "POST", {chat_id: active, prompt, mode: workspaceMode === "code" && $("edit-project").checked ? "edit" : workspaceMode, files: [...selectedFiles], uploads: window.uploadedFiles?.() || [], auto_approve: agentMode && $("auto-approve").checked});
+    const payload = {chat_id: active, prompt: options.retry || options.regenerate ? "" : prompt, mode: workspaceMode === "code" && $("edit-project").checked ? "edit" : workspaceMode, files: [...selectedFiles], uploads: window.uploadedFiles?.() || [], auto_approve: agentMode && $("auto-approve").checked, retry: Boolean(options.retry), regenerate: Boolean(options.regenerate)};
+    const response = await api(agentMode ? "/api/agent/stream" : "/api/generate", "POST", payload);
     const reader = response.body.getReader(), decoder = new TextDecoder(); let pending = "";
     while (true) {
       const {done, value} = await reader.read();
@@ -121,6 +245,15 @@ $("composer").onsubmit = async event => {
         if (!line) continue; const item = JSON.parse(line);
         if (item.type === "progress") progressManager.update(item);
         if (item.token) { responseText.textContent += item.token; scrollMessages(); }
+        if (item.citations) {
+          item.citations.forEach(hit => {
+            const cite = document.createElement("p"); cite.className = "citation";
+            cite.textContent = `${hit.source} p.${hit.page}: ${hit.text}`;
+            responseText.parentElement.insertBefore(cite, responseText);
+          });
+        }
+        if (item.metrics) { lastMetrics = item.metrics; renderMetrics(item.metrics); }
+        if (item.recovery) notice(item.recovery);
         if (item.type === "action" || item.type === "observation" || item.type === "error") {
           addAgentEvent(item);
           progressManager.addStep(item);
@@ -138,9 +271,10 @@ $("composer").onsubmit = async event => {
     }
     if (!complete) throw new Error("Connection ended before completion. Check the saved conversation before retrying.");
     await openChat(active);
-  } catch(e) { notice(e.message); if (responseText && !responseText.textContent) responseText.textContent = "Response unavailable. Your message may already be saved; reopen this conversation before retrying."; }
+    if (lastMetrics) renderMetrics(lastMetrics);
+  } catch(e) { notice(e.message); if (responseText && !responseText.textContent) responseText.textContent = "Response unavailable. Your message may already be saved; use Retry or reopen this conversation before sending again."; }
   finally { progressManager.finish(); $("stop").hidden = true; setBusy(false); await listChats().catch(e => notice(e.message)); $("prompt").focus(); }
-};
+}
 $("export").onclick = async () => {
   if (!active) return notice("Open a conversation to export it.");
   try { const chat = await (await api(`/api/chats/${active}`)).json(); const text = `# ${chat.title}\n\n` + chat.messages.map(m => `## ${m.role === "user" ? "You" : "KISS"}${m.status !== "complete" ? ` (${m.status})` : ""}\n\n${m.content}`).join("\n\n"); const url = URL.createObjectURL(new Blob([text], {type: "text/markdown"})); const a = document.createElement("a"); a.href = url; a.download = `KISS-${active.slice(0,8)}.md`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); } catch(e) { notice(e.message); }
@@ -159,8 +293,9 @@ document.querySelectorAll("[data-workspace]").forEach(button => button.onclick =
   document.body.dataset.mode = mode === "image" || mode === "video" ? "studio" : mode;
   $("studio").hidden = !studio; $("messages").hidden = studio; $("project-panel").hidden = studio; document.querySelector("footer").hidden = studio;
   document.querySelector(".engine-bar").hidden = studio; $("settings").hidden = studio;
+  $("docs-panel").hidden = mode !== "docs";
   if (studio) { mediaKind = mode; $("video-opt-in").hidden = mode !== "video"; await refreshMedia().catch(e => notice(e.message)); }
-  else { workspaceMode = mode; $("prompt").placeholder = mode === "code" ? "Paste code, describe a bug, or ask for an implementation…" : "Ask anything. Keep it yours."; await refresh().catch(e => notice(e.message)); }
+  else { workspaceMode = mode; $("prompt").placeholder = mode === "code" ? "Paste code, describe a bug, or ask for an implementation…" : mode === "docs" ? "Ask a question about documents in this workspace…" : "Ask anything. Keep it yours."; await refresh().catch(e => notice(e.message)); if (mode === "docs") window.refreshDocs?.(); }
 });
 function setStudioWorkflow(workflow) {
   studioWorkflow = workflow;

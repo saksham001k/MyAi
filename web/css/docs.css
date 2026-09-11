@@ -1,0 +1,9 @@
+.docs-heading { display: flex; justify-content: space-between; gap: 16px; margin: 8px 0 16px; }
+.docs-heading h2 { margin: 0; font: 28px/1.15 Georgia, serif; }
+#doc-library { display: grid; gap: 8px; margin: 12px 0; }
+.doc-row, .catalog-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: rgba(255,255,255,.02); }
+.catalog-row small, .doc-row small { color: var(--muted); }
+.catalog { margin-top: 18px; }
+#metrics-badge { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.message-actions { display: flex; gap: 8px; margin-top: 8px; }
+.citation { margin: 8px auto; max-width: 900px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); color: var(--text-secondary); }
