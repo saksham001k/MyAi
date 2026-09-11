@@ -176,7 +176,7 @@ async function ensureModel(route) {
     throw new Error(
       "Another operation is running. Wait for it to finish or stop it first.",
     );
-  if (!state.running || state.model !== route.model) {
+  if (!state.running || state.model !== route.model || state.context !== Number($("context").value) || state.gpu_layers !== ($("gpu").value === "auto" ? state.hardware.gpu_layers : 0)) {
     operation = "loading";
     setBusy(true);
     $("composer-hint").textContent = "Loading " + route.model + "…";
@@ -222,6 +222,8 @@ async function chatReply(prompt, route) {
     for (const line of lines) {
       if (!line) continue;
       const item = JSON.parse(line);
+      if (item.metrics) window.showLocalMetrics?.(item.metrics);
+      if (item.context?.dropped) $("composer-hint").textContent = `${item.context.dropped} older messages omitted to fit context; saved history is retained.`;
       if (item.knowledge)
         window.showKnowledgeEvidence?.(text.parentElement, item.knowledge);
       if (item.token) {

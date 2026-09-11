@@ -17,6 +17,7 @@
     <script src="/js/tasks.js" defer></script>
     <script src="/js/nav.js" defer></script>
     <script src="/js/knowledge.js" defer></script>
+    <script src="/js/setup.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to workspace</a>
@@ -123,6 +124,20 @@
           </button>
         </div>
         <p id="setup-hint"></p>
+        <details id="model-tools">
+          <summary>Models &amp; performance</summary>
+          <p id="memory-status" class="local-note"></p>
+          <label>Available models<select id="catalog-model"></select></label>
+          <p id="catalog-detail" class="local-note"></p>
+          <div class="controls">
+            <button id="download-model" type="button">Download selected model</button>
+            <button id="cancel-download" type="button" hidden>Cancel download</button>
+            <button id="measure-model" type="button">Measure loaded model</button>
+          </div>
+          <p id="download-status" role="status"></p>
+          <p id="local-metrics" role="status">No measurement yet.</p>
+          <p class="local-note">Downloads use the internet and disk space. Partial downloads can resume; files are verified with publisher SHA-256. RAM estimates are guidance, not a fit guarantee.</p>
+        </details>
         <label
           ><input id="video-confirm" type="checkbox" /> Enable experimental
           video requests</label

@@ -19,6 +19,7 @@ class FakeEngine:
         self.fail = False
         self.seen = None
         self.cancel = None
+        self.context = 8192
 
     def status(self):
         return {"running": self.running, "model": "test.gguf", "runtime_found": True, "platform": "test"}

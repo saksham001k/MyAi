@@ -21,7 +21,7 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
       - run: python -m pip install pyinstaller==6.16.0
-      - run: python -m PyInstaller --noconfirm --onedir --name MyAi --add-data "web:web" run.py
+      - run: python -m PyInstaller --noconfirm --onedir --name MyAi --add-data "web:web" --add-data "myai/catalog.json:myai" --add-data "runtimes.lock.json:." run.py
       - run: python scripts/assemble_package.py
       - run: python scripts/package_portable.py
       - uses: actions/upload-artifact@v4

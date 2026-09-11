@@ -37,12 +37,16 @@ def smoke(binary):
                     "Content-Type": "application/json"}, data=json.dumps(data).encode() if data is not None else None)
                 with http.open(req, timeout=10) as response:
                     return response.read()
-            assert b"MyAi" in request("/")
-            json.loads(request("/api/status"))
+            assert b"KISS" in request("/")
+            assert b"knowledge.js" in request("/")
+            status = json.loads(request("/api/status"))
+            assert "memory" in status
+            catalog = json.loads(request("/api/catalog"))
+            assert catalog["models"]
             chat = json.loads(request("/api/chats", {}))
             assert json.loads(request("/api/chats/" + chat["id"]))["id"] == chat["id"]
             assert (workspace / "data/myai.sqlite3").is_file()
-            print("Native package smoke test passed: assets, authenticated API, relocated storage.")
+            print("Native package smoke test passed: assets, catalog, memory status, authenticated API, relocated storage.")
         except Exception as exc:
             raise RuntimeError("".join(seen) + str(exc)) from exc
         finally:

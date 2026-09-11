@@ -38,6 +38,9 @@ def main():
     try:
         server.serve_forever()
     finally:
+        app.downloads.stop()
+        if app.downloads.thread is not None:
+            app.downloads.thread.join(timeout=65)
         app.tasks.close()
         app.media.close()
         app.engine.stop()

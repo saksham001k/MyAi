@@ -115,3 +115,31 @@ SQLite FTS5 retrieves relevant excerpts locally, using words in your question. T
 The library checks source file metadata and content hashes, reindexes changed uploaded copies, and removes missing sources from retrieval. Editing/forgetting a memory invalidates old assistant messages dependent on that saved revision for future model context. Those old answers remain visible as history; Forget is not a transcript purge or secure disk erasure. Already-running responses cannot be changed retroactively, so library edits wait until the current operation finishes. Files originally uploaded from another folder are copies: changing the external original requires uploading and saving the new copy, then forgetting the old one.
 
 Data lives in data/knowledge.sqlite3 and data/uploads/. The library supports 500 saved items, uses bounded excerpts, and makes no model/embedding API calls. Text PDFs are supported; OCR/scanned PDFs, semantic cross-language retrieval, a saved-project picker and safe task continuation remain future work.
+
+## BOT50 integration — 11 September 2026
+
+Settings → **Models & performance** now lists model sizes, licenses, installation
+state and approximate RAM guidance. Downloads start only when requested, keep
+resumable partial files, and verify the publisher SHA-256 before installation.
+The runtime must still be installed using the existing setup workflow. Nothing
+uses a paid inference provider or introduces an account requirement.
+
+**Measure loaded model** runs a short local probe. First-content latency includes
+HTTP/request time; engine prompt processing time is a separate measurement.
+Token throughput appears only when llama.cpp supplies native timings. Otherwise
+content-event rate is explicitly labeled and is not a token-speed benchmark.
+
+Long chat requests reserve room for the configured response and omit old turns
+when needed. Saved history remains intact. Current attachments, retrieved memory,
+and the latest question are retained; an oversized current request is rejected
+before writing a new chat message. The budget uses a byte-based estimate, not an
+exact tokenizer or automatic conversation summary. Changing context/acceleration
+in Settings takes effect when the next request loads or reloads its model.
+
+The integration retains KISS's single composer, original logo and current
+Memory & files library. BOT50's older document tab, duplicate upload/storage
+system, and destructive retry/regenerate implementation were not adopted.
+Read-only file explanation is available through `/api/index/explain`; this does
+not apply code changes. Windows command parsing and CI dependency setup were
+also updated. Windows/Linux execution and portable packaging still need their
+CI checks; a successful Mac test does not qualify every platform.

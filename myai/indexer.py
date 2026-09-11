@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import ast
-import re
 import os
 from .project import EXCLUDED, allowed, confined
 from pathlib import Path
@@ -56,3 +55,40 @@ class WorkspaceIndexer:
                 raise ValueError(f"Cannot attach file: {name}")
             chunks.append(f"--- {name} ---\n{path.read_text(encoding='utf-8')}")
         return "\n\n".join(chunks)
+
+    def explain(self, relative: str) -> dict:
+        """Read-only file excerpt plus symbols. Does not propose or apply patches."""
+        if not isinstance(relative, str) or not relative or len(relative) > 240:
+            raise ValueError("Invalid path")
+        path = confined(self.root, relative)
+        if not path.is_relative_to(self.root) or not path.is_file():
+            raise ValueError(f"Cannot read file: {relative}")
+        if any(part in EXCLUDED for part in path.relative_to(self.root).parts):
+            raise ValueError("That path is excluded from the read-only index")
+        if path.stat().st_size > 200_000:
+            raise ValueError("File is too large to explain in this view")
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("Only UTF-8 text files can be explained") from exc
+        symbols = []
+        if path.suffix == ".py":
+            try:
+                tree = ast.parse(text)
+                symbols = [
+                    {"kind": "class" if isinstance(node, ast.ClassDef) else "function",
+                     "name": node.name, "line": node.lineno}
+                    for node in ast.walk(tree)
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                ]
+            except SyntaxError:
+                symbols = []
+        return {
+            "path": path.relative_to(self.root).as_posix(),
+            "bytes": path.stat().st_size,
+            "symbols": symbols[:80],
+            "excerpt": text[:8000],
+            "truncated": len(text) > 8000,
+            "review_required": True,
+            "note": "Read-only excerpt. Any proposed patch must be reviewed in Project files before it is applied.",
+        }
