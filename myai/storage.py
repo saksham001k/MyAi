@@ -1,5 +1,6 @@
 """Transactional portable conversation storage. No browser storage required."""
 import sqlite3
+import json
 import uuid
 from contextlib import contextmanager
 
@@ -19,6 +20,10 @@ class Store:
                     role TEXT NOT NULL, content TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'complete');
             """)
+
+            columns = {r[1] for r in db.execute('PRAGMA table_info(messages)')}
+            if 'knowledge_refs' not in columns:
+                db.execute("ALTER TABLE messages ADD COLUMN knowledge_refs TEXT NOT NULL DEFAULT '[]'")
 
     @contextmanager
     def connect(self):
@@ -51,13 +56,15 @@ class Store:
                 raise KeyError("Conversation not found")
             chat = dict(row)
             chat["messages"] = [dict(r) for r in db.execute(
-                "SELECT role,content,status FROM messages WHERE chat_id=? ORDER BY id", (cid,))]
+                "SELECT role,content,status,knowledge_refs FROM messages WHERE chat_id=? ORDER BY id", (cid,))]
+            for message in chat["messages"]:
+                message["knowledge_refs"] = json.loads(message["knowledge_refs"])
             return chat
 
-    def add(self, cid, role, content, status="complete"):
+    def add(self, cid, role, content, status="complete", knowledge_refs=None):
         with self.connect() as db:
-            db.execute("INSERT INTO messages(chat_id,role,content,status) VALUES (?,?,?,?)",
-                       (cid, role, content, status))
+            db.execute("INSERT INTO messages(chat_id,role,content,status,knowledge_refs) VALUES (?,?,?,?,?)",
+                       (cid, role, content, status, json.dumps(knowledge_refs or [])))
             db.execute("UPDATE chats SET updated=strftime('%Y-%m-%d %H:%M:%f','now') WHERE id=?", (cid,))
             if role == "user":
                 db.execute("UPDATE chats SET title=? WHERE id=? AND title='New conversation'",

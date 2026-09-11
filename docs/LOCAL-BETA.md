@@ -94,7 +94,7 @@ The older CLI remains available and has separate local Ollama support. Its agent
 
 ## Still on the roadmap
 
-Long-term editable memory, OCR/vision, voice, native desktop automation, app connectors, a durable scheduler, robust automatic task resumption, broader large-project support, and new image/video hardware certification. Existing Studio adapters remain; this beta does not newly certify their output quality or speed.
+OCR/vision, voice, native desktop automation, app connectors, a durable scheduler, robust automatic task resumption, broader large-project support, and new image/video hardware certification. Explicit editable memory and a persistent full-text document library are now available; broader semantic memory is still pending. Existing Studio adapters remain; this beta does not newly certify their output quality or speed.
 
 ## Unified prompt routing
 
@@ -103,3 +103,15 @@ There are no Chat/Code/Studio/Docs/Tasks mode tabs and no duplicate prompt/uploa
 Image editing uses the first attached PNG/JPEG/WebP when the prompt requests a transformation. Text models cannot describe image contents. Video remains experimental and requires its Settings opt-in. A project path does not itself enable command execution.
 
 All result types appear in the main workspace with one composer. Saved conversations, task records and creations remain their respective storage records; this release does not yet give cross-workflow conversational memory to project/media follow-ups. Reports and reviews preserve their existing evidence and Apply/Undo flow.
+
+## Persistent memory and document library (11 September 2026)
+
+Open **Memory & files** beside Settings. Save a titled fact explicitly, optionally scoped to the currently selected project. Use Edit to correct it or Forget to remove it from future saved context. Nothing is automatically learned from conversation history. Your existing response preferences still control answer style.
+
+After attaching a document through the single Attach button, choose **Save to library** on its file card. The stored uploaded copy remains available across browser sessions and application restarts. Library source previews open through View source. Detaching from the current conversation does not forget a saved library item; forgetting a library item does not delete its original upload or detach an active attachment. These actions have separate, visible meanings.
+
+SQLite FTS5 retrieves relevant excerpts locally, using words in your question. This is full-text matching, not semantic embeddings or perfect recall. Source labels such as [K1] identify real retrieved excerpts; the answer's **Saved context used** disclosure shows those excerpts live and source references in saved chats. Source IDs establish retrieval, not factual correctness. Project-scoped items are used only when that project is selected. Saved knowledge is supplied to local chat and project work; public web-research tasks do not automatically receive private saved facts.
+
+The library checks source file metadata and content hashes, reindexes changed uploaded copies, and removes missing sources from retrieval. Editing/forgetting a memory invalidates old assistant messages dependent on that saved revision for future model context. Those old answers remain visible as history; Forget is not a transcript purge or secure disk erasure. Already-running responses cannot be changed retroactively, so library edits wait until the current operation finishes. Files originally uploaded from another folder are copies: changing the external original requires uploading and saving the new copy, then forgetting the old one.
+
+Data lives in data/knowledge.sqlite3 and data/uploads/. The library supports 500 saved items, uses bounded excerpts, and makes no model/embedding API calls. Text PDFs are supported; OCR/scanned PDFs, semantic cross-language retrieval, a saved-project picker and safe task continuation remain future work.

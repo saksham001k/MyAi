@@ -63,3 +63,7 @@ Long-term memory, OCR, chat vision, voice, native desktop control, app connectio
 ## Credits
 
 Inspired by the portable-workspace concept in [PortableLM](https://github.com/orailnoor/PortableLM). Application code is an original MIT-licensed implementation; see [LICENSE](LICENSE). Inference uses [llama.cpp](https://github.com/ggml-org/llama.cpp); diffusion uses [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp). Runtime/model licenses and compatibility requirements remain separate. No pretrained model weights or runtime binaries belong in source commits.
+
+### Memory and files
+
+Use **Memory & files** to save, edit, inspect or forget explicit facts. On an uploaded file, choose **Save to library** for local full-text retrieval in future conversations. Saved context is cited and remains on this computer. See [the usage guide](docs/LOCAL-BETA.md) for source freshness, project scope and deletion behavior.

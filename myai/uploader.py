@@ -4,6 +4,8 @@ from __future__ import annotations
 import mimetypes
 import re
 import json
+import hashlib
+import threading
 from .documents import extract
 import uuid
 from email.parser import BytesParser
@@ -30,6 +32,7 @@ class Uploader:
     def __init__(self, root: Path):
         self.root = (root / "data" / "uploads").resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self.lock = threading.RLock()
 
     def save_multipart(self, content_type: str, payload: bytes) -> dict:
         if len(payload) > MAX_UPLOAD_BYTES:
@@ -63,6 +66,7 @@ class Uploader:
             "mime_type": mime,
             "url": f"/api/uploads/{ident}",
             "extraction": extract(destination),
+            "sha256": hashlib.sha256(data).hexdigest(),
         }
         (self.root / (ident + '.metadata')).write_text(json.dumps(manifest), encoding='utf-8')
         return {**manifest, 'extraction': {k: v for k, v in manifest['extraction'].items() if k != 'passages'}}
@@ -70,14 +74,27 @@ class Uploader:
     def find(self, ident: str) -> Path:
         if not re.fullmatch(r"[0-9a-f]{32}", ident):
             raise ValueError("Invalid upload ID.")
-        matches = [p for p in self.root.glob(ident + ".*") if p.suffix != ".metadata"]
+        matches = [p for p in self.root.glob(ident + ".*") if p.suffix.lower() in ALLOWED_EXTENSIONS]
         if len(matches) != 1 or not matches[0].is_file() or matches[0].is_symlink():
             raise FileNotFoundError(ident)
         return matches[0]
 
     def metadata(self, ident):
-        path = self.find(ident)
-        saved = self.root / (ident + '.metadata')
-        if saved.exists():
-            return json.loads(saved.read_text(encoding='utf-8'))
-        return {'id': ident, 'filename': path.name, 'extraction': extract(path)}
+        with self.lock:
+            path = self.find(ident)
+            saved = self.root / (ident + '.metadata')
+            metadata = json.loads(saved.read_text(encoding='utf-8')) if saved.exists() else {
+                'id': ident, 'filename': path.name, 'url': '/api/uploads/' + ident}
+            if path.stat().st_size > MAX_UPLOAD_BYTES:
+                raise ValueError('Stored source exceeds the 50 MB reading budget.')
+            hasher = hashlib.sha256()
+            with path.open('rb') as stream:
+                while chunk := stream.read(65536):
+                    hasher.update(chunk)
+            digest = hasher.hexdigest()
+            if metadata.get('sha256') != digest:
+                metadata.update(sha256=digest, size_bytes=path.stat().st_size, extraction=extract(path))
+                temp = saved.with_suffix('.metadata.tmp')
+                temp.write_text(json.dumps(metadata), encoding='utf-8')
+                temp.replace(saved)
+            return metadata

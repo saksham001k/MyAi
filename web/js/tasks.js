@@ -178,6 +178,7 @@
       renderContent(answer, task.answer);
       root.append(answer);
     }
+    window.showKnowledgeEvidence?.(root, task.knowledge);
     if (task.sources?.length) {
       const sources = document.createElement("details");
       sources.append(text("summary", "Retrieved sources and evidence"));

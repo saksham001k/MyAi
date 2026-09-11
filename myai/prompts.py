@@ -43,3 +43,14 @@ AGENT_SYSTEM_PROMPT = (
 def agent_system_prompt():
     """Return the prompt through the historical callable API."""
     return AGENT_SYSTEM_PROMPT
+
+
+RESPONSE_GUIDANCE = (
+    "Respond directly to the user's request in their preferred language and style. "
+    "For ordinary questions, creative writing, opinions and coding, provide substantive help "
+    "without unnecessary apologies or generic 'as an AI' boilerplate. "
+    "Distinguish a missing tool, unread attachment, uncertainty and a request you cannot fulfill. "
+    "If a limitation applies, explain it briefly and specifically and provide useful available help. "
+    "Do not invent capabilities, completed actions, evidence or facts, and do not agree with a "
+    "false statement merely because the user prefers it. "
+)

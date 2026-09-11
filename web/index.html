@@ -16,6 +16,7 @@
     <script src="/app.js" defer></script>
     <script src="/js/tasks.js" defer></script>
     <script src="/js/nav.js" defer></script>
+    <script src="/js/knowledge.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to workspace</a>
@@ -65,6 +66,8 @@
             aria-label="Open command palette"
           >
             ⌘K</button
+          ><button id="knowledge-open" type="button" class="subtle">
+            Memory &amp; files</button
           ><button id="export" type="button" class="subtle">Export</button
           ><button
             id="settings-toggle"
@@ -241,6 +244,56 @@
         </p>
       </footer>
     </main>
+    <dialog id="knowledge-dialog" aria-labelledby="knowledge-title">
+      <header class="topbar">
+        <h2 id="knowledge-title">Your memory &amp; files</h2>
+        <button id="knowledge-close" type="button">Close</button>
+      </header>
+      <p>
+        Only items you explicitly save belong here. KISS finds relevant passages
+        locally for chat and project work. Nothing is sent to an embedding
+        service.
+      </p>
+      <p class="local-note">
+        Forget removes an item from future saved context. Old conversations and
+        original uploaded files are retained. Detach an active attachment too if
+        you no longer want to include it. Memory is not automatically learned
+        from your chats.
+      </p>
+      <label
+        >Find saved items<input
+          id="knowledge-search"
+          type="search"
+          placeholder="Search memories and documents…"
+      /></label>
+      <div id="knowledge-items"></div>
+      <p id="knowledge-error" role="alert" class="notice" hidden></p>
+      <form id="memory-form">
+        <h3>Remember something</h3>
+        <label
+          >Title<input
+            id="memory-title"
+            required
+            maxlength="120"
+            placeholder="For example: My project deadline" /></label
+        ><label
+          >What should KISS remember?<textarea
+            id="memory-content"
+            required
+            maxlength="6000"
+            rows="3"
+          ></textarea></label
+        ><label
+          ><input id="memory-project" type="checkbox" /> Use only for the
+          selected project</label
+        >
+        <div class="controls">
+          <button id="memory-save" type="submit" class="primary">
+            Save memory</button
+          ><button id="memory-cancel" type="button" hidden>Cancel edit</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="file-preview" aria-labelledby="preview-title">
       <header class="topbar">
         <h2 id="preview-title">File preview</h2>

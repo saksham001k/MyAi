@@ -124,7 +124,10 @@ async function openChat(id) {
   window.setAttachmentScope?.(id);
   $("chat-title").textContent = chat.title;
   $("messages").replaceChildren();
-  for (const m of chat.messages) message(m.role, m.content);
+  for (const m of chat.messages) {
+    const content = message(m.role, m.content);
+    window.showKnowledgeEvidence?.(content.parentElement, m.knowledge_refs);
+  }
   renderHistory();
   scrollMessages();
 }
@@ -204,6 +207,7 @@ async function chatReply(prompt, route) {
     prompt,
     mode: route.kind === "code" ? "code" : "chat",
     uploads: window.uploadedFiles?.() || [],
+    project_path: $("task-project").value.trim(),
   });
   const reader = r.body.getReader(),
     decoder = new TextDecoder();
@@ -218,6 +222,8 @@ async function chatReply(prompt, route) {
     for (const line of lines) {
       if (!line) continue;
       const item = JSON.parse(line);
+      if (item.knowledge)
+        window.showKnowledgeEvidence?.(text.parentElement, item.knowledge);
       if (item.token) {
         answer += item.token;
         text.textContent = answer;

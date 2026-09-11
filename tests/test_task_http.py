@@ -13,7 +13,7 @@ from test_app import FakeEngine
 class TaskHTTPTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
-        self.root=Path(self.tmp.name)
+        self.root=Path(self.tmp.name).resolve()
         self.engine=FakeEngine()
         self.app=App(self.root,Path(__file__).resolve().parents[1]/'web',self.engine)
         self.server=make_server(self.app)
@@ -70,6 +70,79 @@ class TaskHTTPTests(unittest.TestCase):
         supplied=json.dumps(self.engine.seen)
         self.assertIn('October 12',supplied);self.assertNotIn('fake date',supplied)
         self.assertIn('Be concise.',supplied)
+        self.assertNotIn('You have no web access.', supplied)
+        self.assertIn('automatically routed research workflow', supplied)
+    def test_task_receives_saved_response_preferences(self):
+        self.app.preferences.save({'instructions': 'Answer in concise Hinglish.', 'max_output_tokens': 2048})
+        seen = []
+        def stream(messages):
+            seen.extend(messages)
+            return iter('{"final":"No sources retrieved."}')
+        self.engine.agent_stream = stream
+        code, body = self.req('/api/tasks', {'kind': 'research', 'goal': 'Research a topic'})
+        self.assertEqual(code, 202)
+        ident = json.loads(body)['id']
+        for _ in range(100):
+            record = json.loads(self.req('/api/tasks/' + ident)[1])
+            if record.get('output_path'):
+                break
+            time.sleep(.02)
+        self.assertIn('Answer in concise Hinglish.', json.dumps(seen))
+        self.assertIn('Do not invent capabilities', json.dumps(seen))
+
+    def test_knowledge_api_and_forgotten_history_excluded(self):
+        self.assertEqual(self.req('/api/knowledge', auth=False)[0], 401)
+        self.assertEqual(self.req('/api/knowledge/memory', {'title': 'x', 'content': 'y'}, auth=False)[0], 401)
+        code, saved = self.req('/api/knowledge/memory', {'title': 'Observatory launch', 'content': 'Observatory launch is 17 October.'})
+        self.assertEqual(code, 200)
+        saved = json.loads(saved)
+        cid = json.loads(self.req('/api/chats', {})[1])['id']
+        def answer(messages, temperature, max_tokens=1024):
+            yield 'The observatory launch is 17 October.'
+        self.engine.stream = answer
+        code, stream = self.req('/api/generate', {'chat_id': cid, 'prompt': 'When is the observatory launch?'})
+        self.assertEqual(code, 200)
+        self.assertIn(b'"knowledge"', stream)
+        self.assertTrue(self.app.store.get(cid)['messages'][-1]['knowledge_refs'])
+        self.req('/api/knowledge/forget', {'id': saved['id']})
+        seen = []
+        def capture(messages, temperature, max_tokens=1024):
+            seen.extend(messages)
+            yield 'I do not have that saved fact.'
+        self.engine.stream = capture
+        self.req('/api/generate', {'chat_id': cid, 'prompt': 'What is the observatory launch date?'})
+        self.assertNotIn('17 October', json.dumps(seen))
+        self.assertEqual(json.loads(self.req('/api/knowledge')[1]), [])
+
+    def test_library_blocks_mutation_during_generation(self):
+        self.app.busy.acquire()
+        try:
+            self.assertEqual(self.req('/api/knowledge/memory', {'title':'x','content':'y'})[0], 409)
+        finally:
+            self.app.busy.release()
+
+    def test_saved_knowledge_used_for_project_not_public_research(self):
+        self.app.knowledge.save_memory({'title':'Observatory release', 'content':'Private verification code: violet-pond.'})
+        seen = []
+        def stream(messages):
+            seen.extend(messages)
+            return iter('{"final":"No files changed."}')
+        self.engine.agent_stream = stream
+        source = self.root / 'source'
+        source.mkdir()
+        (source / 'readme.txt').write_text('Verification project')
+        for kind in ('project', 'research'):
+            seen.clear()
+            code, body = self.req('/api/tasks', {'kind':kind,'goal':'Inspect observatory release','project_path':str(source)})
+            self.assertEqual(code, 202, body)
+            ident = json.loads(body)['id']
+            for _ in range(100):
+                record = json.loads(self.req('/api/tasks/' + ident)[1])
+                if record.get('output_path') and not self.app.busy.locked():
+                    break
+                time.sleep(.02)
+            self.assertEqual('violet-pond' in json.dumps(seen), kind == 'project')
+
     def test_task_record_and_report_survive_new_http_request(self):
         self.engine.agent_stream=lambda _:iter('{"final":"No source read yet."}')
         code,body=self.req('/api/tasks',{'kind':'research','goal':'Make a report'})

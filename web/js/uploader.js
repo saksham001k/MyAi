@@ -59,7 +59,20 @@
         save();
         render();
       };
-      card.append(info, view, remove);
+      const library = document.createElement("button");
+      library.type = "button";
+      library.textContent = "Save to library";
+      library.onclick = async () => {
+        library.disabled = true;
+        try {
+          await window.saveUploadedToLibrary(m);
+          library.textContent = "Saved to library";
+        } catch (e) {
+          window.showToast?.(e.message, "error");
+          library.disabled = false;
+        }
+      };
+      card.append(info, view, library, remove);
       el("upload-chips").append(card);
     }
   }
@@ -67,7 +80,7 @@
     const dialog = el("file-preview");
     el("preview-title").textContent = m.filename;
     el("preview-detail").textContent =
-      size(m.size_bytes) +
+      (Number.isFinite(m.size_bytes) ? size(m.size_bytes) : "Stored locally") +
       " · " +
       (m.extraction?.detail || "Stored on this computer.");
     el("preview-content").textContent = "Loading preview…";
@@ -79,6 +92,10 @@
         "This stored file is no longer available. Attach it again.",
       );
     const blob = await response.blob();
+    el("preview-detail").textContent =
+      size(blob.size) +
+      " · " +
+      (m.extraction?.detail || "Stored on this computer.");
     if (previewURL) URL.revokeObjectURL(previewURL);
     previewURL = URL.createObjectURL(blob);
     el("preview-content").replaceChildren();
@@ -112,6 +129,7 @@
       a.click();
     };
   }
+  window.previewUploadedFile = preview;
   el("preview-close").onclick = () => el("file-preview").close();
   el("file-preview").addEventListener("close", () => {
     if (previewURL) URL.revokeObjectURL(previewURL);
