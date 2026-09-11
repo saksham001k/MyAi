@@ -152,6 +152,7 @@ class DownloadManager:
                 "total": item.get("size_bytes_approx"),
                 "error": None,
             }
+
         def run():
             try:
                 self._set(status="downloading")

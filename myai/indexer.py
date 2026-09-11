@@ -6,7 +6,6 @@ through the workbench review/apply flow; nothing here applies edits.
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
 SKIP_DIRS = {".git", ".venv", "node_modules", ".kiss", "__pycache__", "dist", "build"}
