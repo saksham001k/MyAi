@@ -88,6 +88,24 @@ def classify_risk(command_or_action):
     return "LOW"
 
 
+def split_command(command):
+    """Tokenize a command without a shell. Windows keeps path backslashes and drops wrapping quotes."""
+    if isinstance(command, (list, tuple)):
+        args = list(command)
+    elif isinstance(command, str):
+        args = shlex.split(command, posix=(os.name != "nt"))
+        if os.name == "nt":
+            stripped = []
+            for arg in args:
+                if len(arg) >= 2 and arg[0] == arg[-1] and arg[0] in {"'", '"'}:
+                    arg = arg[1:-1]
+                stripped.append(arg)
+            args = stripped
+    else:
+        raise TypeError("command must be a string or an argument sequence")
+    return args
+
+
 def classify_command(command):
     """Backward-compatible high-risk predicate used by the existing server."""
     return "high" if classify_risk(command) == "HIGH" else "normal"
@@ -104,7 +122,7 @@ def require_approval(command_or_action, approved=False):
 
 
 def is_network_command(command_or_action):
-    args = shlex.split(command_or_action, posix=(os.name != "nt")) if isinstance(command_or_action, str) else list(command_or_action)
+    args = split_command(command_or_action)
     executable = os.path.basename(args[0]).lower() if args else ""
     text = " ".join(args)
     return executable in _NETWORK_COMMANDS or bool(
@@ -119,7 +137,7 @@ def execute_command(command, timeout=30, confirm=False, force=False,
         raise TypeError("command must be a string or an argument sequence")
     if type(timeout) not in (int, float) or not 0 < timeout <= 30:
         raise ValueError("timeout must be between 0 and 30 seconds")
-    args = shlex.split(command, posix=(os.name != "nt")) if isinstance(command, str) else list(command)
+    args = split_command(command)
     if not args or any(not isinstance(arg, str) or not arg for arg in args):
         raise ValueError("command must contain a non-empty executable")
     require_approval(args, approved=confirm)

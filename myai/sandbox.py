@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from .tools.system_control import is_catastrophic
+from .tools.system_control import is_catastrophic, split_command
 
 
 class SandboxPolicyError(PermissionError):
@@ -51,10 +50,7 @@ _APPROVAL_TOKEN = "KISS-CONFIRMED"
 
 
 def _arguments(command: str | Sequence[str]) -> list[str]:
-    if isinstance(command, str):
-        args = shlex.split(command, posix=(os.name != "nt"))
-    else:
-        args = list(command)
+    args = split_command(command)
     if not args or any(not isinstance(item, str) or not item for item in args):
         raise ValueError("command must contain a non-empty executable")
     return args
