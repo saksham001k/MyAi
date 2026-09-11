@@ -54,6 +54,20 @@ class Store:
                 "SELECT role,content,status FROM messages WHERE chat_id=? ORDER BY id", (cid,))]
             return chat
 
+    def pop_last(self, cid, role=None, statuses=None):
+        """Remove the newest message, optionally constrained by role/status."""
+        with self.connect() as db:
+            query = "SELECT id, role, status FROM messages WHERE chat_id=? ORDER BY id DESC LIMIT 1"
+            row = db.execute(query, (cid,)).fetchone()
+            if row is None:
+                raise ValueError("This conversation has no messages to replace.")
+            if role and row["role"] != role:
+                raise ValueError("The last message is not an assistant reply.")
+            if statuses and row["status"] not in statuses:
+                raise ValueError("The last reply completed. Use regenerate to replace it.")
+            db.execute("DELETE FROM messages WHERE id=?", (row["id"],))
+            db.execute("UPDATE chats SET updated=strftime('%Y-%m-%d %H:%M:%f','now') WHERE id=?", (cid,))
+
     def add(self, cid, role, content, status="complete"):
         with self.connect() as db:
             db.execute("INSERT INTO messages(chat_id,role,content,status) VALUES (?,?,?,?)",

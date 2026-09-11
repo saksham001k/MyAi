@@ -1,0 +1,26 @@
+{
+  "description": "Fixed lexical evaluation set for cited-passage support. This checks whether retrieved passages contain the facts an answer would need; it is not an LLM-as-judge and does not score generation quality.",
+  "cases": [
+    {
+      "id": "models-folder",
+      "question": "Where should compatible GGUF models be stored in the workspace?",
+      "document": "layout.txt",
+      "content": "The models folder holds compatible .gguf files. Never commit model weights. Runtime binaries live under runtime/<platform>/ and conversations are stored in data/.",
+      "expected_contains": "models folder"
+    },
+    {
+      "id": "loopback-api",
+      "question": "Does the application API listen on the local loopback interface?",
+      "document": "security.txt",
+      "content": "Browser requests go to an authenticated loopback-only API. The application owns one llama-server child on a separate loopback port. No permissive CORS header is sent.",
+      "expected_contains": "loopback-only API"
+    },
+    {
+      "id": "unsupported-claim",
+      "question": "Is MyAi proven faster than PortableLM?",
+      "document": "comparison.txt",
+      "content": "No speed or quality superiority claim is currently supported by measurements. Compare using identical computer, model, quantization, context and prompts, and record raw results.",
+      "expected_contains": "No speed or quality superiority"
+    }
+  ]
+}

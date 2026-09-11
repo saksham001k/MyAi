@@ -4,14 +4,16 @@
 
 MyAi is a local-first AI chat application by Saksham Katiyar. It runs a compatible GGUF model through a dedicated llama.cpp server and keeps conversations beside the app, ready to move with the workspace.
 
-**Status: v0.1.0 source implementation. Real-model and physical pendrive acceptance testing are still required.** This repository contains working application code, tests, launchers, and packaging workflows—not pretrained model weights or runtime binaries. It does not claim to outperform PortableLM yet.
+**Status: v0.2.0 source implementation. Real-model and physical pendrive acceptance testing are still required.** This repository contains working application code, tests, launchers, and packaging workflows—not pretrained model weights or runtime binaries. It does not claim to outperform PortableLM yet.
 
 ## What works in this version
 
 - Browser chat interface with streamed text, response cancellation, copy, and Markdown export.
 - Persistent conversations, title search, and deletion using SQLite.
 - Local GGUF model discovery, model loading/unloading, context and GPU-layer controls.
-- Isolated llama-server process with loopback binding and a per-launch API key.
+- Isolated llama-server process with loopback binding and a per-launch API key. Production inference is that real GGUF path; CI protocol fixtures are not shipped in `run.py`.
+- Verified catalog with publisher licenses, resumable checksummed downloads, RAM-based conservative recommendations, and session speed measurements (llama.cpp timings or labeled wall-clock).
+- Retry/regenerate, estimated context budgeting, local text/PDF retrieval with passage citations, and read-only repository explanations (patches still need review).
 - Authenticated application API, strict origin checks, no external UI assets or cloud fallback.
 - Relative workspace layout, transactional saves, checksum-verified model import helper.
 - Source launchers for Mac, Windows and Linux; native app packaging workflow.
@@ -48,7 +50,7 @@ python3 -m unittest discover -s tests -v
 python3 scripts/doctor.py
 ```
 
-`doctor.py` is expected to report missing items until your runtime and model are installed. Tests use a protocol fixture, not real AI; passing them does not validate model quality or speed.
+`doctor.py` reports missing runtime/model until they are installed, plus a memory snapshot and conservative recommendation. Tests use a protocol fixture, not real AI, unless `MYAI_REAL_INFERENCE=1` is set with a local llama-server and GGUF. Passing them does not validate model quality or speed.
 
 ## Packaged builds
 
@@ -58,7 +60,7 @@ Keep the entire extracted directory, including `_internal`, together. See [pendr
 
 ## Scope and next steps
 
-The first target is reliable portable chat. Document RAG, repository indexing, voice, Android, automatic model recommendations, resumable downloads, encrypted storage, and authenticated LAN sharing are **not implemented**. See [ROADMAP](docs/ROADMAP.md) for acceptance gates.
+The first target is reliable portable chat. Automatic quality rankings, encrypted storage (design only; see [ENCRYPTION](docs/ENCRYPTION.md)), voice, Android, and authenticated LAN sharing are **not implemented**. See [ROADMAP](docs/ROADMAP.md) for acceptance gates.
 
 MyAi stores data locally, but does not make the host computer trustworthy or prevent operating-system/browser caches. Storage is not encrypted. Stop MyAi before ejecting or copying its workspace.
 

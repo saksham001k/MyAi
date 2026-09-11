@@ -1,4 +1,9 @@
-"""Own only the llama-server process started by this application."""
+"""Own only the llama-server process started by this application.
+
+Production inference is always a dedicated llama.cpp ``llama-server`` child
+speaking the HTTP+SSE protocol. Unit tests may inject a protocol fixture in
+place of that child; that fixture is not a model and is never used by ``run.py``.
+"""
 import json
 import os
 import platform
@@ -12,6 +17,7 @@ import urllib.request
 from .runtime import executable
 from .hardware import detect_hardware
 from .model_verifier import verify_model_hash
+from .metrics import StreamMeter, empty_metrics, parse_llama_timings
 from .tools import (click_and_type, execute_command, inspect_system, navigate,
                     take_screenshot)
 
@@ -33,6 +39,11 @@ class Engine:
         self.lock = threading.Lock()
         self.log = None
         self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        self.context_size = None
+        self.gpu_layers = None
+        self.last_metrics = empty_metrics()
+        self.last_llama_event = None
+        self.inference = "llama.cpp"
 
     @property
     def binary(self):
@@ -65,7 +76,10 @@ class Engine:
     def status(self):
         running = self.process is not None and self.process.poll() is None
         return {"running": running, "model": self.model if running else None,
-                "runtime_found": self.binary.is_file(), "platform": platform_tag()}
+                "runtime_found": self.binary.is_file(), "platform": platform_tag(),
+                "inference": self.inference, "context": self.context_size if running else None,
+                "gpu_layers": self.gpu_layers if running else None,
+                "metrics": self.last_metrics}
 
     def start(self, name, context=4096, gpu_layers=None, model_sha256=None):
         if name not in {m["name"] for m in self.models()}:
@@ -103,6 +117,8 @@ class Engine:
                         with self.http.open(self.request("/health"), timeout=2) as response:
                             if response.status == 200:
                                 self.model = name
+                                self.context_size = context
+                                self.gpu_layers = selected_layers
                                 return self.status()
                     except (OSError, urllib.error.URLError):
                         pass
@@ -122,24 +138,54 @@ class Engine:
             raise ValueError("Load a model before sending a message.")
         payload = {"messages": messages, "stream": True, "temperature": temperature,
                    "max_tokens": max_tokens}
+        meter = StreamMeter()
+        self.last_llama_event = None
         try:
             with self.http.open(self.request("/v1/chat/completions", payload), timeout=180) as response:
-                for raw in response:
-                    if not raw.startswith(b"data: "):
-                        continue
-                    line = raw[6:].strip()
-                    if line == b"[DONE]":
-                        return
-                    event = json.loads(line)
-                    if "error" in event:
-                        raise RuntimeError("The inference engine reported an error.")
-                    choices = event.get("choices", [])
-                    if choices:
-                        content = choices[0].get("delta", {}).get("content")
-                        if content:
-                            yield content
+                def events():
+                    for raw in response:
+                        if not raw.startswith(b"data: "):
+                            continue
+                        line = raw[6:].strip()
+                        if line == b"[DONE]":
+                            return
+                        event = json.loads(line)
+                        self.last_llama_event = event
+                        parsed = parse_llama_timings(event)
+                        if parsed:
+                            meter.metrics.update(
+                                {k: v for k, v in parsed.items() if v is not None})
+                        if "error" in event:
+                            raise RuntimeError("The inference engine reported an error.")
+                        choices = event.get("choices", [])
+                        if choices:
+                            content = choices[0].get("delta", {}).get("content")
+                            if content:
+                                yield content
+                yield from meter.watch(events())
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"Engine rejected the request ({exc.code}). The conversation may exceed the context; start a new chat or increase context.") from exc
+            raise RuntimeError(f"Engine rejected the request ({exc.code}). The conversation may exceed the context; start a new chat, retry with budgeting, or increase context.") from exc
+        finally:
+            self.last_metrics = meter.metrics
+
+    def calibrate(self, prompt="Reply with exactly: ok"):
+        if not self.status()["running"]:
+            raise ValueError("Load a model before measuring performance.")
+        tokens = []
+        for token in self.stream(
+                [{"role": "system", "content": "You are a measurement probe. Answer briefly."},
+                 {"role": "user", "content": prompt}],
+                temperature=0, max_tokens=16):
+            tokens.append(token)
+        result = dict(self.last_metrics)
+        result["model"] = self.model
+        result["context"] = self.context_size
+        result["gpu_layers"] = self.gpu_layers
+        result["backend"] = (self.hardware or detect_hardware()).backend
+        result["prompt"] = prompt
+        result["output_preview"] = "".join(tokens)[:80]
+        result["calibration"] = True
+        return result
 
     def stop(self):
         if self.process is not None:
@@ -155,3 +201,5 @@ class Engine:
             self.log.close()
             self.log = None
         self.model = None
+        self.context_size = None
+        self.gpu_layers = None

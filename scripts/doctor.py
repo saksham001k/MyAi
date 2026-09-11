@@ -8,6 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from myai.engine import Engine, platform_tag
+from myai.hardware import memory_snapshot
+from myai.catalog import describe
 
 
 def main():
@@ -23,8 +25,14 @@ def main():
               ("At least one GGUF model", bool(engine.models()))]
     for label, ok in checks:
         print(f"{'PASS' if ok else 'MISSING'}  {label}")
+    memory = memory_snapshot()
+    print(f"Memory: total={memory.total_mb} MiB available={memory.available_mb} MiB "
+          f"vram={memory.vram_mb} MiB source={memory.source}")
+    rec = describe(root, memory)["recommendation"]
+    print(f"Recommendation: {rec}")
     print(f"Free storage: {shutil.disk_usage(root).free / 1024 ** 3:.1f} GiB")
-    print("These checks do not verify model compatibility, available RAM, GPU drivers, or inference quality.")
+    print("These checks do not verify model compatibility, GPU drivers, or inference quality.")
+    print("Passing doctor.py is not a real GGUF inference or pendrive acceptance result.")
     return 0 if all(ok for _, ok in checks) else 1
 
 

@@ -52,6 +52,6 @@ Record computer chip, RAM, OS, runtime version, model filename/checksum, context
 - [ ] Rename/move the folder; model discovery and history still work.
 - [ ] Load and answer on the intended second computer with its matching runtime.
 - [ ] Exit MyAi, safely eject, reconnect, and reopen successfully.
-- [ ] Record startup time, time to first token, generation speed, and peak memory.
+- [ ] Record startup time, time to first token, generation speed, and peak memory. The app can display TTFT/tok/s for a session when llama.cpp timings (or wall-clock fallbacks) are available; fill this row from the actual computer, not from CI.
 
 Only after these checks should this release be described as pendrive-tested. Safe removal matters: transaction-based storage reduces normal corruption risks but cannot guarantee survival of an abrupt drive removal or failing flash media.
