@@ -297,6 +297,7 @@ def make_server(app, port=0):
                             raise ValueError("Provide document text or content_b64")
                         data = content.encode("utf-8")
                     self.output(201, app.documents.ingest(name, data))
+                elif path == "/api/index/explain":
                     self.output(200, app.indexer.explain(body.get("path")))
                 elif path in ("/api/generate", "/api/chat"):
                     if body.get("mode") == "agent":

@@ -52,7 +52,7 @@ _APPROVAL_TOKEN = "KISS-CONFIRMED"
 
 def _arguments(command: str | Sequence[str]) -> list[str]:
     if isinstance(command, str):
-        args = shlex.split(command)
+        args = shlex.split(command, posix=(os.name != "nt"))
     else:
         args = list(command)
     if not args or any(not isinstance(item, str) or not item for item in args):
@@ -96,6 +96,10 @@ class SandboxRunner:
             raise ValueError("Sandbox working directory must be inside the workspace.")
         ensure_policy(request, args)
         env = {"PATH": os.environ.get("PATH", "")}
+        if os.name == "nt":
+            for key in ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "PATHEXT", "COMSPEC", "TEMP", "TMP"):
+                if key in os.environ:
+                    env[key] = os.environ[key]
         if request.env:
             env.update({str(key): str(value) for key, value in request.env.items()})
         try:
