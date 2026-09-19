@@ -8,6 +8,10 @@ It runs compatible GGUF models through its own llama.cpp process. The web app do
 
 ## Start
 
+Optional: [Shared memory with Earthma](docs/SHARED-MEMORY.md) lets MyAi and
+Earthma Notes use the same saved facts across model changes and app restarts.
+Open the **Shared memory** panel after using the Earthma launcher.
+
 ```sh
 python3 scripts/setup_local.py
 python3 scripts/local.py start

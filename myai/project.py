@@ -97,14 +97,15 @@ class ProjectCopy:
         p = confined(self.work, name)
         if p.stat().st_size > MAX_FILE:
             raise ValueError('File exceeds the source-reading budget.')
-        return p.read_text(encoding='utf-8')
+        # Review and conflict checks compare exact bytes, including CRLF on Windows.
+        return p.read_bytes().decode('utf-8')
 
     def write(self, name, content):
         if not isinstance(content, str) or '\x00' in content or len(content.encode()) > MAX_FILE:
             raise ValueError('Write UTF-8 text up to 200 KB.')
         p = confined(self.work, name)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding='utf-8')
+        p.write_bytes(content.encode('utf-8'))
         return {'path': name, 'bytes': p.stat().st_size, 'location': 'working copy; original unchanged'}
 
     def files(self):

@@ -27,15 +27,17 @@ from .tasks import Tasks
 from .preferences import Preferences
 from .prompts import RESPONSE_GUIDANCE
 from .documents import context as document_context
+from .shared_memory import SharedMemory, SharedMemoryError
 
 
 class App:
-    def __init__(self, root, web, engine=None):
+    def __init__(self, root, web, engine=None, shared_memory=None):
         self.root, self.web = root, web
         for directory in ("data", "models", "runtime"):
             (root / directory).mkdir(parents=True, exist_ok=True)
         self.store = Store(root / "data")
         self.engine = engine or Engine(root)
+        self.shared_memory = shared_memory if shared_memory is not None else SharedMemory.from_environment()
         self.token = secrets.token_urlsafe(32)
         self.busy = threading.Lock()
         self.cancel = threading.Event()
@@ -100,6 +102,7 @@ def make_server(app, port=0):
         def do_GET(self):
             path = urlparse(self.path).path
             static = {"/js/setup.js": ("js/setup.js", "text/javascript; charset=utf-8"),
+                      "/js/shared_memory.js": ("js/shared_memory.js", "text/javascript; charset=utf-8"),
                       "/": ("index.html", "text/html; charset=utf-8"),
                       "/js/knowledge.js": ("js/knowledge.js", "text/javascript; charset=utf-8"),
                       "/js/tasks.js": ("js/tasks.js", "text/javascript; charset=utf-8"),
@@ -129,7 +132,12 @@ def make_server(app, port=0):
             if not self.authorized():
                 return
             try:
-                if path == "/api/knowledge":
+                if path == "/api/shared-memory/status":
+                    self.output(200, app.shared_memory.status())
+                elif path == "/api/shared-memory/records":
+                    namespace = parse_qs(urlparse(self.path).query).get('namespace', ['personal'])[0]
+                    self.output(200, {'records': app.shared_memory.records(namespace)})
+                elif path == "/api/knowledge":
                     self.output(200, app.knowledge.list())
                 elif path == "/api/preferences":
                     self.output(200, app.preferences.get())
@@ -198,6 +206,8 @@ def make_server(app, port=0):
                     self.output(200, app.store.get(path.rsplit("/", 1)[1]))
                 else:
                     self.output(404, {"error": "Not found"})
+            except SharedMemoryError as exc:
+                self.output(exc.status, {'error': str(exc)})
             except KeyError:
                 self.output(404, {"error": "Item not found"})
             except (ValueError, TypeError, FileNotFoundError) as exc:
@@ -309,7 +319,11 @@ def make_server(app, port=0):
                 self.output(409, {"error": "An operation is already in progress. Stop it or wait."})
                 return
             try:
-                if path == "/api/preferences":
+                if path == '/api/shared-memory/ask':
+                    self.output(200, app.shared_memory.ask(app.engine, body, app.cancel))
+                elif path in ('/api/shared-memory/create', '/api/shared-memory/edit', '/api/shared-memory/delete'):
+                    self.output(200, app.shared_memory.mutate(path.rsplit('/', 1)[1], body))
+                elif path == "/api/preferences":
                     self.output(200, app.preferences.save(body))
                 elif path == "/api/project/upload":
                     self.output(201, app.workbench.upload(body.get("path"), body.get("content")))
@@ -362,6 +376,8 @@ def make_server(app, port=0):
                     self.generate_agent(body, sse=True)
                 else:
                     self.output(404, {"error": "Not found"})
+            except SharedMemoryError as exc:
+                self.output(exc.status, {'error': str(exc)})
             except KeyError:
                 self.output(404, {"error": "Conversation not found"})
             except (ValueError, TypeError) as exc:

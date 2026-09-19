@@ -74,7 +74,12 @@ class KnowledgeTests(unittest.TestCase):
         self.k.save_document({'upload_id': ident, 'content': 'forged'})
         self.assertNotIn('forged', json.dumps(self.k.context('observatory')))
         path.unlink()
-        path.symlink_to(self.root/'outside.txt')
+        try:
+            path.symlink_to(self.root/'outside.txt')
+        except OSError as exc:
+            if getattr(exc, 'winerror', None) == 1314:
+                self.skipTest('Windows account cannot create symbolic links')
+            raise
         (self.root/'outside.txt').write_text('outside secret')
         self.assertEqual(self.k.context('outside secret'), [])
     def test_unchanged_document_does_not_invalidate_old_reference(self):
