@@ -2,14 +2,13 @@
 import json
 import os
 import re
-import shlex
 import threading
 import time
 import uuid
 from pathlib import Path
 
 from .agent import AutonomousAgent, AgentStopped
-from .process import run_process
+from .process import run_process, split_command
 from .project import ProjectCopy
 from .research import Research
 from .prompts import RESPONSE_GUIDANCE
@@ -149,7 +148,7 @@ class Tasks:
                 if record['test_command']:
                     def test():
                         nonlocal tested_hash, last_test
-                        last_test = command(shlex.split(record['test_command']))
+                        last_test = command(split_command(record['test_command']))
                         tested_hash = project.review()['review_id']
                         return last_test
                     register('run_tests', {}, test)

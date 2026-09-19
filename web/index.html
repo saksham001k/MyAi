@@ -17,6 +17,7 @@
     <script src="/js/tasks.js" defer></script>
     <script src="/js/nav.js" defer></script>
     <script src="/js/knowledge.js" defer></script>
+    <script src="/js/shared_memory.js" defer></script>
     <script src="/js/setup.js" defer></script>
   </head>
   <body>
@@ -69,6 +70,7 @@
             ⌘K</button
           ><button id="knowledge-open" type="button" class="subtle">
             Memory &amp; files</button
+          ><button id="shared-memory-open" type="button" class="subtle">Shared memory</button
           ><button id="export" type="button" class="subtle">Export</button
           ><button
             id="settings-toggle"
@@ -308,6 +310,34 @@
           ><button id="memory-cancel" type="button" hidden>Cancel edit</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="shared-memory-dialog" aria-labelledby="shared-memory-title">
+      <header class="topbar">
+        <h2 id="shared-memory-title">Shared memory</h2>
+        <button id="shared-memory-close" type="button">Close</button>
+      </header>
+      <p>Save facts once and use them in MyAi and Earthma Notes. Only facts you explicitly save are shared.</p>
+      <p id="shared-memory-status" role="status"></p>
+      <p id="shared-memory-error" role="alert" hidden></p>
+      <label>Memory space<input id="shared-memory-space" value="personal" maxlength="64" /></label>
+      <button id="shared-memory-refresh" type="button">Refresh facts</button>
+      <div id="shared-memory-records"></div>
+      <form id="shared-memory-form">
+        <label>Fact to remember<textarea id="shared-memory-text" required maxlength="6000" rows="3"></textarea></label>
+        <button id="shared-memory-save" type="submit">Save fact</button>
+        <button id="shared-memory-cancel" type="button" hidden>Cancel edit</button>
+      </form>
+      <hr />
+      <label>Installed model<select id="shared-memory-model"></select></label>
+      <button id="shared-memory-load" type="button">Load selected model</button>
+      <p id="shared-memory-model-status" role="status"></p>
+      <form id="shared-memory-question-form">
+        <label>Ask about saved facts<textarea id="shared-memory-question" required maxlength="2000" rows="2"></textarea></label>
+        <button type="submit">Ask memory</button>
+      </form>
+      <p id="shared-memory-answer" role="status"></p>
+      <div id="shared-memory-sources"></div>
+      <p class="footnote">Uses current matching facts in this space with the loaded model. Earlier chat messages are excluded. Forget removes a fact from future memory answers; existing chats and exports remain.</p>
     </dialog>
     <dialog id="file-preview" aria-labelledby="preview-title">
       <header class="topbar">

@@ -355,7 +355,8 @@ body.sidebar-collapsed .brand img {
     margin: 12px 0;
   }
 }
-#knowledge-dialog {
+#knowledge-dialog,
+#shared-memory-dialog {
   width: min(850px, 92vw);
   max-height: 86dvh;
   overflow: auto;
@@ -365,10 +366,32 @@ body.sidebar-collapsed .brand img {
   color: var(--text-primary);
   padding: 22px;
 }
-#knowledge-dialog::backdrop {
+#knowledge-dialog::backdrop,
+#shared-memory-dialog::backdrop {
   background: #000a;
   backdrop-filter: blur(5px);
 }
+#shared-memory-dialog label {
+  display: block;
+  margin: 12px 0;
+}
+#shared-memory-dialog input,
+#shared-memory-dialog textarea,
+#shared-memory-dialog select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+#shared-memory-records {
+  max-height: 25vh;
+  overflow: auto;
+}
+#shared-memory-records article {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 0;
+}
+#shared-memory-error { color: var(--text-primary); }
+#shared-memory-answer { white-space: pre-wrap; font-weight: 600; }
 #knowledge-dialog > p {
   font-size: 13px;
   color: var(--text-secondary);

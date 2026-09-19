@@ -4,6 +4,29 @@ import signal
 import subprocess
 import tempfile
 import time
+import shlex
+
+
+def split_command(command):
+    """Parse platform quoting without invoking a shell or losing Windows slashes."""
+    if os.name != 'nt':
+        return shlex.split(command)
+    import ctypes
+    from ctypes import wintypes
+    shell32 = ctypes.WinDLL('shell32', use_last_error=True)
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    shell32.CommandLineToArgvW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int)]
+    shell32.CommandLineToArgvW.restype = ctypes.POINTER(wintypes.LPWSTR)
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel32.LocalFree.restype = ctypes.c_void_p
+    count = ctypes.c_int()
+    args = shell32.CommandLineToArgvW(command.strip(), ctypes.byref(count))
+    if not args:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        return [args[index] for index in range(count.value)]
+    finally:
+        kernel32.LocalFree(args)
 
 
 def run_process(argv, cwd, cancel, timeout=120):
