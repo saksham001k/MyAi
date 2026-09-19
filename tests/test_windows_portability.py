@@ -14,7 +14,7 @@ from myai.project import ProjectCopy
 class PortabilityTests(unittest.TestCase):
     def test_crlf_is_not_a_phantom_edit_and_undo_restores_bytes(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             source = root / 'source'
             source.mkdir()
             original = b'answer = 1\r\n'
