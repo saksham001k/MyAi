@@ -1,5 +1,16 @@
+param([string]$MemoryData = 'D:\AI\earthma-memory', [string]$EarthmaRoot = '')
 $ErrorActionPreference = 'Stop'
 $appRoot = Split-Path -Parent $PSScriptRoot
+if (-not $EarthmaRoot) { $EarthmaRoot = Join-Path (Split-Path -Parent $appRoot) 'Earthma' }
+if ((Test-Path -LiteralPath (Join-Path $EarthmaRoot 'earthma\memory_service.py')) -and (Test-Path -LiteralPath $MemoryData)) {
+    $dataFolder = Join-Path $appRoot 'data'
+    New-Item -ItemType Directory -Path $dataFolder -Force | Out-Null
+    $configFile = Join-Path $dataFolder 'desktop-memory.json'
+    if (-not (Test-Path -LiteralPath $configFile)) {
+        $config = @{earthma=$EarthmaRoot; data=$MemoryData; port=8877} | ConvertTo-Json
+        [System.IO.File]::WriteAllText($configFile, $config)
+    }
+}
 $python = Join-Path $appRoot '.venv\Scripts\pythonw.exe'
 if (-not (Test-Path -LiteralPath $python)) { throw 'Run scripts/setup_local.py first to create the MyAi environment.' }
 $shell = New-Object -ComObject WScript.Shell

@@ -18,5 +18,19 @@ if the window component is missing, a setup window installs
 requires the existing one-time `scripts/setup_local.py` setup.
 For launch errors, see `data/desktop.log`. Logs stay local and are Git-ignored.
 
+## Shared memory without terminals
+
+On a configured PC, the desktop app starts Earthma shared memory automatically
+and connects before loading the interface. An existing authenticated service is
+reused and left running when MyAi closes. A service started by MyAi closes with
+the app; saved memory remains on disk and is available on the next launch.
+
+The local, Git-ignored `data/desktop-memory.json` contains `earthma` (Earthma
+checkout folder), `data` (existing memory-data folder), and `port` (usually 8877).
+The shortcut installer creates this configuration if sibling Earthma and
+`D:\AI\earthma-memory` exist. Use `-MemoryData` and `-EarthmaRoot` installer
+arguments for other locations. An existing configuration is preserved.
+No access credentials are included in Git.
+
 Developer terminal entrypoints (`run.py` and `scripts/local.py start`) remain
 available. Avoid starting a terminal instance alongside the desktop application.

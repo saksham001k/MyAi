@@ -1,5 +1,10 @@
 # Shared source memory with Earthma
 
+**Windows desktop app:** open the MyAi shortcut. With the local desktop memory
+configuration installed, it starts/connects shared memory automatically; no
+PowerShell windows need to remain open. See [Windows app](WINDOWS-APP.md).
+The commands below remain available for manual/developer startup.
+
 Shared memory is an optional local connection. Start Earthma's memory service,
 then launch MyAi using `Earthma/scripts/launch_myai_memory.py`. In MyAi, open
 **Shared memory**, save a short fact, load an installed model, and ask about the

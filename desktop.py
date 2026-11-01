@@ -2,6 +2,7 @@
 import ctypes
 from ctypes import wintypes
 import hashlib
+import html
 import logging
 import os
 from pathlib import Path
@@ -81,6 +82,7 @@ def ensure_window_runtime():
 
 def run_window(webview, auto_close=0):
     from myai.engine import Engine
+    from myai.desktop_memory import DesktopMemory
     from myai.hardware import detect_hardware
     from myai.server import App, make_server
     from run import close_app
@@ -92,10 +94,13 @@ def run_window(webview, auto_close=0):
     started = threading.Event()
     closing = threading.Event()
     state = {}
+    memory = DesktopMemory(ROOT)
     def start_backend():
         started.set()
         try:
-            app = App(ROOT, ROOT / 'web', Engine(ROOT, hardware=detect_hardware()))
+            adapter = memory.start()
+            app = App(ROOT, ROOT / 'web', Engine(ROOT, hardware=detect_hardware()), shared_memory=adapter)
+            logging.info('Shared-memory connection: %s', adapter.status())
             state['app'] = app
             server = make_server(app)
             state['server'] = server
@@ -105,11 +110,11 @@ def run_window(webview, auto_close=0):
             logging.info('Local service ready on port %s', server.server_port)
             if not closing.is_set():
                 window.load_url(f'http://127.0.0.1:{server.server_port}/#token={app.token}')
-        except Exception:
+        except Exception as exc:
             logging.exception('MyAi startup failed')
             if not closing.is_set():
-                window.load_html('<h1>MyAi could not start</h1><p>Close this window and open MyAi again. '
-                                 'Details are in data/desktop.log in your MyAi folder.</p>')
+                window.load_html('<h1>MyAi could not start</h1><p>' + html.escape(str(exc)) +
+                                 '</p><p>Details are in data/desktop.log in your MyAi folder.</p>')
         finally:
             ready.set()
         if auto_close:
@@ -142,6 +147,7 @@ def run_window(webview, auto_close=0):
         if server:
             server.server_close()
             state['thread'].join(timeout=5)
+        memory.close()
         logging.info('Desktop shutdown complete')
 
 
