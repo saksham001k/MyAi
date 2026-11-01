@@ -32,7 +32,7 @@ def activate_existing():
     user.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     user.SetForegroundWindow.argtypes = [wintypes.HWND]
     for _ in range(150):
-        window = user.FindWindowW(None, 'MyAi')
+        window = user.FindWindowW(None, 'KISS') or user.FindWindowW(None, 'MyAi')
         if window:
             user.ShowWindow(window, 9)
             user.SetForegroundWindow(window)
@@ -49,9 +49,9 @@ def ensure_window_runtime():
         import tkinter as tk
         from tkinter import ttk
         dialog = tk.Tk()
-        dialog.title('MyAi setup')
+        dialog.title('KISS setup')
         dialog.geometry('440x150')
-        ttk.Label(dialog, text='Preparing MyAi for its first launch…').pack(pady=20)
+        ttk.Label(dialog, text='Preparing KISS for its first launch…').pack(pady=20)
         ttk.Label(dialog, text='Downloading the desktop window component. Internet is required.').pack()
         progress = ttk.Progressbar(dialog, mode='indeterminate')
         progress.pack(fill='x', padx=25, pady=15)
@@ -75,7 +75,7 @@ def ensure_window_runtime():
         dialog.after(100, poll)
         dialog.mainloop()
         if not result or result[0]:
-            raise RuntimeError('Desktop setup did not complete. Check your internet connection and open MyAi again.')
+            raise RuntimeError('Desktop setup did not complete. Check your internet connection and open KISS again.')
         import webview
         return webview
 
@@ -87,8 +87,8 @@ def run_window(webview, auto_close=0):
     from myai.server import App, make_server
     from run import close_app
     # Show the window immediately; initialize the existing backend in a worker.
-    window = webview.create_window('MyAi', html='''<html><body style="background:#101827;color:#edf2fa;
-        font:18px Segoe UI;padding:64px"><h1>MyAi</h1><p>Starting your local assistant…</p></body></html>''',
+    window = webview.create_window('KISS', html='''<html><body style="background:#101827;color:#edf2fa;
+        font:18px Segoe UI;padding:64px"><h1>KISS</h1><p>Starting your local assistant…</p></body></html>''',
         width=1280, height=850, min_size=(900, 600))
     ready = threading.Event()
     started = threading.Event()
@@ -113,8 +113,8 @@ def run_window(webview, auto_close=0):
         except Exception as exc:
             logging.exception('MyAi startup failed')
             if not closing.is_set():
-                window.load_html('<h1>MyAi could not start</h1><p>' + html.escape(str(exc)) +
-                                 '</p><p>Details are in data/desktop.log in your MyAi folder.</p>')
+                window.load_html('<h1>KISS could not start</h1><p>' + html.escape(str(exc)) +
+                                 '</p><p>Details are in data/desktop.log in your application folder.</p>')
         finally:
             ready.set()
         if auto_close:
@@ -133,7 +133,7 @@ def run_window(webview, auto_close=0):
     window.events.closed += on_closed
     window.events.loaded += on_loaded
     try:
-        webview.start(start_backend, gui='edgechromium', storage_path=str(ROOT / 'data' / 'desktop-webview'))
+        webview.start(start_backend, gui='edgechromium', icon=str(ROOT / 'web' / 'kiss.ico'), storage_path=str(ROOT / 'data' / 'desktop-webview'))
     finally:
         closing.set()
         if started.is_set():
@@ -166,12 +166,13 @@ def main():
             activate_existing()
             return
         webview = ensure_window_runtime()
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('KISS.LocalAssistant')
         run_window(webview, float(os.environ.get('MYAI_DESKTOP_SMOKE_SECONDS', '0')))
     except Exception:
         logging.exception('Desktop launch failed')
         ctypes.windll.user32.MessageBoxW(None,
-            'MyAi could not start. Check your internet connection if this is the first launch.\n\n'
-            'Details: ' + str(ROOT / 'data' / 'desktop.log'), 'MyAi', 16)
+            'KISS could not start. Check your internet connection if this is the first launch.\n\n'
+            'Details: ' + str(ROOT / 'data' / 'desktop.log'), 'KISS', 16)
     finally:
         if handle:
             kernel = ctypes.WinDLL('kernel32')

@@ -33,7 +33,7 @@ async function api(path, method = "GET", body) {
 }
 function setBusy(value) {
   busy = value;
-  for (const id of ["send", "new-chat", "unload", "context", "gpu"])
+  for (const id of ["send", "new-chat", "unload", "context", "gpu", "workspace-back"])
     $(id).disabled = value;
   document.querySelectorAll(".chat-delete").forEach((button) => { button.disabled = value; });
   $("stop").hidden = !value || operation === "loading";
@@ -106,6 +106,9 @@ function bindSuggestions() {
 }
 function newChat() {
   if (busy) return;
+  $("settings").hidden = true;
+  $("settings-toggle").setAttribute("aria-expanded", "false");
+  $("workspace-back").hidden = true;
   leaveView();
   active = null;
   sessionStorage.removeItem("kiss-active-chat");
@@ -118,6 +121,9 @@ function newChat() {
 }
 async function openChat(id) {
   if (busy) return;
+  $("settings").hidden = true;
+  $("settings-toggle").setAttribute("aria-expanded", "false");
+  $("workspace-back").hidden = true;
   leaveView();
   const chat = await (await api("/api/chats/" + id)).json();
   active = id;
@@ -384,6 +390,7 @@ window.prepareTaskView = () => {
   sessionStorage.removeItem("kiss-active-chat");
   $("messages").replaceChildren();
   $("chat-title").textContent = "Your work";
+  $("workspace-back").hidden = false;
   renderHistory();
   return true;
 };
@@ -456,6 +463,7 @@ async function showMedia(id, generation) {
   const j = state.jobs.find((j) => j.id === id);
   if (!j) throw new Error("Creation not found.");
   $("chat-title").textContent = "Your creation";
+  $("workspace-back").hidden = false;
   $("messages").replaceChildren();
   message("user", j.prompt);
   const answer = message(
@@ -502,17 +510,52 @@ async function showMedia(id, generation) {
 }
 $("search").oninput = renderHistory;
 $("new-chat").onclick = newChat;
+$("workspace-back").onclick = () => {
+  if (busy) return notice("Stop or finish the current operation before returning to chat.");
+  newChat();
+  $("prompt").focus();
+};
 $("sidebar-toggle").onclick = () => {
   const v = document.body.classList.toggle("sidebar-collapsed");
   $("sidebar-toggle").setAttribute("aria-expanded", String(!v));
 };
 $("settings-toggle").onclick = () => {
   $("settings").hidden = !$("settings").hidden;
+  if (!$("settings").hidden) { $("settings").scrollTop = 0; $("context").focus(); }
   $("settings-toggle").setAttribute(
     "aria-expanded",
     String(!$("settings").hidden),
   );
 };
+function closePreferences() {
+  $("settings").hidden = true;
+  $("settings-toggle").setAttribute("aria-expanded", "false");
+  settingsMenuToggle.focus();
+}
+$("settings-back").onclick = closePreferences;
+document.querySelectorAll("[data-details-back]").forEach((button) => {
+  button.onclick = () => {
+    const section = $(button.dataset.detailsBack);
+    section.open = false;
+    section.querySelector("summary").focus();
+  };
+});
+// Every overlay returns keyboard focus to a visible navigation control.
+for (const id of ["knowledge-dialog", "shared-memory-dialog", "project-memory-dialog", "file-preview"]) {
+  const dialog = $(id);
+  dialog.addEventListener("close", () => {
+    if (id === "file-preview") $("attach-file").focus();
+    else $("settings-menu-toggle").focus();
+  });
+}
+$("settings").addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || document.querySelector("dialog[open]")) return;
+  const openSection = event.target.closest("details[open]") || $("settings").querySelector("details[open]");
+  if (openSection) { openSection.open = false; openSection.querySelector("summary").focus(); }
+  else closePreferences();
+  event.preventDefault();
+  event.stopPropagation();
+});
 const settingsMenuToggle = $("settings-menu-toggle");
 function closeSettingsMenu(restoreFocus = false) {
   $("settings-menu").hidden = true;

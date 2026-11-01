@@ -17,13 +17,20 @@ $shell = New-Object -ComObject WScript.Shell
 $desktop = [Environment]::GetFolderPath('Desktop')
 $programs = [Environment]::GetFolderPath('Programs')
 foreach ($folder in @($desktop, $programs)) {
-    $shortcut = $shell.CreateShortcut((Join-Path $folder 'MyAi.lnk'))
+    $shortcut = $shell.CreateShortcut((Join-Path $folder 'KISS.lnk'))
     $shortcut.TargetPath = $python
     $shortcut.Arguments = '"' + (Join-Path $appRoot 'desktop.py') + '"'
     $shortcut.WorkingDirectory = $appRoot
-    $shortcut.Description = 'Open your local MyAi assistant'
-    $icon = Join-Path $appRoot 'web\myai.ico'
+    $shortcut.Description = 'KISS — your local assistant'
+    $icon = Join-Path $appRoot 'web\kiss.ico'
     if (Test-Path -LiteralPath $icon) { $shortcut.IconLocation = $icon }
     $shortcut.Save()
+    $oldLink = Join-Path $folder 'MyAi.lnk'
+    if (Test-Path -LiteralPath $oldLink) {
+        $old = $shell.CreateShortcut($oldLink)
+        if ($old.Arguments -eq $shortcut.Arguments -and $old.TargetPath -eq $shortcut.TargetPath) {
+            Remove-Item -LiteralPath $oldLink
+        }
+    }
 }
-Write-Output 'MyAi shortcuts installed on the desktop and in the Start menu.'
+Write-Output 'KISS shortcuts installed on the desktop and in the Start menu.'

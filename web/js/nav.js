@@ -46,8 +46,8 @@
         button.type = "button";
         button.innerHTML = `<span>${name}</span><small>${description}</small>`;
         button.onclick = () => {
-          run();
           close();
+          run();
         };
         list.append(button);
       });

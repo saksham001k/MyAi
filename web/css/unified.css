@@ -1,4 +1,16 @@
 /* Unified workspace: one composer, one attachment list, inline results. */
+/* Give settings the workspace instead of squeezing it above the conversation. */
+main:has(> #settings:not([hidden])) > #messages,
+main:has(> #settings:not([hidden])) > footer { display: none; }
+main > #settings:not([hidden]) {
+  flex: 1; min-height: 0; max-height: none; margin-bottom: 0;
+  padding: 20px 24px; border-radius: 14px;
+}
+main > #settings .settings-heading { top: -20px; }
+@media (max-width: 700px) {
+  main > #settings:not([hidden]) { padding: 12px; }
+  main > #settings .settings-heading { top: -12px; flex-wrap: wrap; }
+}
 .topbar > div:first-child { min-width: 0; flex: 1; }
 .topbar-actions { flex-shrink: 0; }
 .sidebar { z-index: 10; }
@@ -102,6 +114,17 @@ body.sidebar-collapsed #settings-menu-toggle { justify-content: center; padding:
 .settings h2 {
   margin-top: 0;
 }
+.settings-heading { position: sticky; top: -16px; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; background: var(--surface); border-bottom: 1px solid var(--line); }
+.settings-heading h2 { margin: 0; font-size: 20px; }
+.settings-breadcrumb { color: var(--text-secondary); font-size: 11px; }
+.section-back { display: block; margin: 12px 0; padding: 7px 10px; font-size: 12px; background: transparent; }
+.settings details { padding: 12px 0; border-top: 1px solid var(--line); }
+.settings summary { cursor: pointer; font-weight: 600; }
+.settings label { max-width: 100%; }
+.settings .settings-heading button { flex-shrink: 0; font-size: 12px; }
+.settings { background: var(--surface); scroll-padding-top: 65px; }
+dialog > .topbar { position: sticky; top: -22px; z-index: 2; padding: 12px 0; background: var(--surface); border-bottom: 1px solid var(--line); }
+dialog > .topbar h2 { margin: 0; }
 #composer {
   max-width: 1000px;
   margin: auto;

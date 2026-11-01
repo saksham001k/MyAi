@@ -7,7 +7,7 @@
   window.selectedSharedProject = () => selected;
   async function operation(action) {
     el('error').hidden = true;
-    const controls = [...el('dialog').querySelectorAll('button,input,textarea,select')];
+    const controls = [...el('dialog').querySelectorAll('button,input,textarea,select')].filter(control => control !== el('close'));
     controls.forEach(control => { control.disabled = true; });
     try { await action(); }
     catch (error) { el('error').textContent = error.message; el('error').hidden = false; }

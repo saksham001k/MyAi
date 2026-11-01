@@ -86,11 +86,13 @@
           <h1 id="chat-title">What would you like to do?</h1>
         </div>
         <div class="topbar-actions">
+          <button id="workspace-back" type="button" class="subtle" hidden>← Back to chat</button>
           <button id="export" type="button" class="subtle">Export</button>
         </div>
       </header>
       <section id="settings" class="settings" hidden>
-        <h2>Local preferences</h2>
+        <div class="settings-heading"><h2>Settings</h2><button id="settings-back" type="button">← Back to conversation</button></div>
+        <p class="settings-breadcrumb">Settings / Preferences &amp; models</p>
         <p>
           KISS selects and loads an installed model for each request. Nothing is
           downloaded automatically.
@@ -134,6 +136,7 @@
         <p id="setup-hint"></p>
         <details id="add-models">
           <summary>Add models</summary>
+          <button type="button" class="section-back" data-details-back="add-models">← Back to settings</button>
           <p>Import a GGUF model you have already downloaded. Paste its full file path; the original file is kept.</p>
           <label>Model file path<input id="import-model-path" type="text" placeholder="D:\AI\models\your-model.gguf" /></label>
           <label>Publisher SHA-256 (optional)<input id="import-model-sha" type="text" maxlength="64" placeholder="Checksum from the model publisher" /></label>
@@ -143,6 +146,7 @@
         </details>
         <details id="model-tools">
           <summary>Models &amp; performance</summary>
+          <button type="button" class="section-back" data-details-back="model-tools">← Back to settings</button>
           <p id="memory-status" class="local-note"></p>
           <label>Available models<select id="catalog-model"></select></label>
           <p id="catalog-detail" class="local-note"></p>

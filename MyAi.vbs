@@ -5,7 +5,7 @@ Set files = CreateObject("Scripting.FileSystemObject")
 root = files.GetParentFolderName(WScript.ScriptFullName)
 python = root & "\.venv\Scripts\pythonw.exe"
 If Not files.FileExists(python) Then
-  MsgBox "MyAi's Python environment is missing. Run scripts\setup_local.py once, then open MyAi again.", vbExclamation, "MyAi setup"
+  MsgBox "KISS's Python environment is missing. Run scripts\setup_local.py once, then open KISS again.", vbExclamation, "KISS setup"
   WScript.Quit 1
 End If
 shell.CurrentDirectory = root
