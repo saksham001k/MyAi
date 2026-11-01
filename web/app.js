@@ -35,6 +35,7 @@ function setBusy(value) {
   busy = value;
   for (const id of ["send", "new-chat", "unload", "context", "gpu"])
     $(id).disabled = value;
+  document.querySelectorAll(".chat-delete").forEach((button) => { button.disabled = value; });
   $("stop").hidden = !value || operation === "loading";
 }
 function renderContent(target, value) {
@@ -146,6 +147,34 @@ function renderHistory() {
     b.title = chat.title;
     b.onclick = () => openChat(chat.id).catch((e) => notice(e.message));
     row.append(b);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "chat-delete";
+    remove.title = "Delete conversation";
+    remove.setAttribute("aria-label", "Delete conversation: " + chat.title);
+    remove.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>';
+    remove.disabled = busy;
+    remove.onclick = async () => {
+      if (busy) return;
+      const dialog = $("delete-chat-dialog");
+      $("delete-chat-description").textContent = '“' + chat.title + '”';
+      dialog.returnValue = "cancel";
+      const confirmed = new Promise((resolve) => dialog.addEventListener("close", () => resolve(dialog.returnValue === "delete"), { once: true }));
+      dialog.showModal();
+      if (!await confirmed || busy) return;
+      remove.disabled = true;
+      try {
+        await api("/api/chats/" + chat.id, "DELETE");
+        sessionStorage.removeItem("myai-attachments-" + chat.id);
+        chats = chats.filter((c) => c.id !== chat.id);
+        if (active === chat.id) newChat();
+        else renderHistory();
+      } catch (error) {
+        notice(error.message);
+        remove.disabled = false;
+      }
+    };
+    row.append(remove);
     $("history").append(row);
   }
   for (const b of document.querySelectorAll(
@@ -484,6 +513,34 @@ $("settings-toggle").onclick = () => {
     String(!$("settings").hidden),
   );
 };
+const settingsMenuToggle = $("settings-menu-toggle");
+function closeSettingsMenu(restoreFocus = false) {
+  $("settings-menu").hidden = true;
+  settingsMenuToggle.setAttribute("aria-expanded", "false");
+  if (restoreFocus) settingsMenuToggle.focus();
+}
+settingsMenuToggle.onclick = () => {
+  const open = $("settings-menu").hidden;
+  $("settings-menu").hidden = !open;
+  settingsMenuToggle.setAttribute("aria-expanded", String(open));
+  if (open) $("settings-toggle").focus();
+};
+$("settings-menu").addEventListener("click", (event) => {
+  if (event.target.closest("button")) {
+    const preferences = event.target.closest("button").id === "settings-toggle";
+    closeSettingsMenu();
+    if (preferences && !$("settings").hidden) $("context").focus();
+  }
+});
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".sidebar-settings")) closeSettingsMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("settings-menu").hidden) {
+    closeSettingsMenu(true);
+    event.preventDefault();
+  }
+});
 $("task-allow-commands").onchange = () => {
   $("task-test").disabled = !$("task-allow-commands").checked;
 };

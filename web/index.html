@@ -22,6 +22,15 @@
     <script src="/js/setup.js" defer></script>
   </head>
   <body>
+    <dialog id="delete-chat-dialog" aria-labelledby="delete-chat-heading" aria-describedby="delete-chat-description">
+      <h2 id="delete-chat-heading">Delete conversation?</h2>
+      <p id="delete-chat-description"></p>
+      <p class="local-note">The conversation and all its messages will be permanently removed. This cannot be undone.</p>
+      <form method="dialog" class="delete-chat-actions">
+        <button value="cancel" autofocus>Cancel</button>
+        <button value="delete" class="delete-confirm">Delete conversation</button>
+      </form>
+    </dialog>
     <a class="skip-link" href="#main-content">Skip to workspace</a>
     <aside class="sidebar" aria-label="Saved work">
       <a class="brand" href="/" aria-label="KISS home"
@@ -53,6 +62,20 @@
         ></nav>
       </div>
       <div class="sidebar-bottom">
+        <div class="sidebar-settings">
+          <button id="settings-menu-toggle" type="button" aria-label="Settings" aria-expanded="false" aria-controls="settings-menu">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9 3-1 3-3 1-2 3 2 2-1 3 3 2 2-1 3 2 3-1 1-3 3-1 2-3-2-2 1-3-3-2-2 1-3-2Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Settings</span>
+          </button>
+          <div id="settings-menu" class="settings-menu" hidden aria-label="Settings and tools">
+            <span class="settings-menu-label">SETTINGS &amp; TOOLS</span>
+            <button id="settings-toggle" type="button" aria-expanded="false" aria-controls="settings">Preferences &amp; models</button>
+            <button id="knowledge-open" type="button">Memory &amp; files</button>
+            <button id="shared-memory-open" type="button">Shared memory</button>
+            <button id="project-memory-open" type="button">Project memory</button>
+            <button id="palette-open" type="button">Command palette <kbd>Ctrl K</kbd></button>
+          </div>
+        </div>
         On your computer.<small>No account or message credits.</small>
       </div>
     </aside>
@@ -63,26 +86,7 @@
           <h1 id="chat-title">What would you like to do?</h1>
         </div>
         <div class="topbar-actions">
-          <button
-            id="palette-open"
-            type="button"
-            aria-label="Open command palette"
-          >
-            ⌘K</button
-          ><button id="knowledge-open" type="button" class="subtle">
-            Memory &amp; files</button
-          ><button id="shared-memory-open" type="button" class="subtle">Shared memory</button
-          ><button id="project-memory-open" type="button" class="subtle">Project memory</button
-          ><button id="export" type="button" class="subtle">Export</button
-          ><button
-            id="settings-toggle"
-            type="button"
-            class="subtle"
-            aria-expanded="false"
-            aria-controls="settings"
-          >
-            Settings
-          </button>
+          <button id="export" type="button" class="subtle">Export</button>
         </div>
       </header>
       <section id="settings" class="settings" hidden>

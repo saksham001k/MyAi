@@ -60,7 +60,7 @@
   }
   function close() {
     palette.hidden = true;
-    byId("palette-open").focus();
+    byId("settings-menu-toggle").focus();
   }
   byId("palette-open").onclick = open;
   document

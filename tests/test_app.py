@@ -131,10 +131,17 @@ class ServerTests(unittest.TestCase):
 
     def test_delete_and_unloaded_model(self):
         cid = self.chat()
+        other = self.chat()
+        self.app.store.add(cid, 'user', 'Remove this message')
+        self.app.store.add(cid, 'assistant', 'Remove this answer')
+        self.app.store.add(other, 'user', 'Keep this message')
         self.engine.running = False
         self.assertEqual(self.request("/api/generate", {"chat_id": cid, "prompt": "Hi"})[0], 400)
         self.assertEqual(self.request(f"/api/chats/{cid}", method="DELETE")[0], 200)
         self.assertEqual(self.request(f"/api/chats/{cid}")[0], 404)
+        with self.app.store.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM messages WHERE chat_id=?', (cid,)).fetchone()[0], 0)
+        self.assertEqual(self.app.store.get(other)['messages'][0]['content'], 'Keep this message')
 
     def test_code_mode_and_media_api_auth(self):
         cid = self.chat()
