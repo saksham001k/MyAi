@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.setup_mac import ROOT, download, extract
+from myai.runtime import executable
 
 PACKS = {
     "code-small": [("Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF", "qwen2.5-coder-1.5b-instruct-q4_k_m.gguf", "")],
@@ -48,21 +49,31 @@ def model_asset(repo, filename):
     return url, digest, item.get("size", item.get("lfs", {}).get("size", 0))
 
 
+def diffusion_asset(releases, windows=False):
+    for release in releases:
+        if release.get('draft'):
+            continue
+        for asset in release.get('assets', []):
+            name = asset.get('name', '')
+            matches = (bool(re.search(r'bin-win-cpu-x64\.zip$', name, re.I)) if windows else
+                       bool(re.search(r'(macos|darwin|osx)', name, re.I) and
+                            re.search(r'(arm64|aarch64)', name, re.I) and name.endswith(('.zip', '.tar.gz'))))
+            if matches and re.fullmatch(r'sha256:[0-9a-f]{64}', asset.get('digest') or ''):
+                return asset
+    raise ValueError('No checksummed compatible diffusion runtime found in official releases.')
+
+
 def install_diffusion():
-    if platform.system() != "Darwin" or platform.machine() != "arm64":
-        raise ValueError("Automatic diffusion runtime setup currently requires Apple Silicon macOS")
-    folder = ROOT / "runtime/darwin-arm64"
-    if (folder / "sd-cli").is_file():
+    windows = platform.system() == 'Windows' and platform.machine().lower() in ('amd64', 'x86_64')
+    mac = platform.system() == 'Darwin' and platform.machine() == 'arm64'
+    if not (windows or mac):
+        raise ValueError('Automatic diffusion setup supports Windows x64 CPU and Apple Silicon macOS.')
+    folder = ROOT / ('runtime/windows-x86_64' if windows else 'runtime/darwin-arm64')
+    binary_name = 'sd-cli.exe' if windows else 'sd-cli'
+    if executable(folder, binary_name).is_file():
         return
-    releases = fetch_json("https://api.github.com/repos/leejet/stable-diffusion.cpp/releases?per_page=20")
-    assets = [a for r in releases if not r.get("draft") for a in r.get("assets", [])
-              if re.search(r"(macos|darwin|osx)", a["name"], re.I)
-              and re.search(r"(arm64|aarch64)", a["name"], re.I)
-              and a["name"].endswith((".zip", ".tar.gz"))
-              and (a.get("digest") or "").startswith("sha256:")]
-    if not assets:
-        raise ValueError("No verified Apple Silicon diffusion binary available upstream. Model downloads can still run without --runtime; runtime installation remains pending.")
-    asset = assets[0]
+    releases = fetch_json('https://api.github.com/repos/leejet/stable-diffusion.cpp/releases?per_page=20')
+    asset = diffusion_asset(releases, windows)
     url = asset["browser_download_url"]
     if not url.startswith("https://github.com/leejet/stable-diffusion.cpp/releases/download/"):
         raise ValueError("Unexpected runtime publisher")
@@ -75,12 +86,23 @@ def install_diffusion():
     with tempfile.TemporaryDirectory(dir=folder) as tmp:
         stage = Path(tmp) / "vendor"
         extract(archive, stage)
-        servers = [p for p in stage.rglob("sd-cli") if p.is_file() and not p.is_symlink()]
+        servers = [p for p in stage.rglob(binary_name) if p.is_file() and not p.is_symlink()]
         if len(servers) != 1:
             raise ValueError("The runtime archive does not contain one sd-cli")
         relative = servers[0].relative_to(stage).as_posix()
-        servers[0].chmod(0o755)
+        if not windows:
+            servers[0].chmod(0o755)
         os.replace(stage, destination)
+    if windows:
+        # Keep diffusion's DLLs separate from llama.cpp's DLLs.
+        manifest = folder / 'runtime.json'
+        mapping = json.loads(manifest.read_text()) if manifest.exists() else {}
+        mapping[binary_name] = 'diffusion-vendor/' + relative
+        temp = manifest.with_suffix('.tmp')
+        with temp.open('x', encoding='utf-8') as stream:
+            json.dump(mapping, stream, indent=2)
+        os.replace(temp, manifest)
+        return
     launcher = folder / "sd-cli"
     launcher.write_text('#!/bin/sh\nBASE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\nexec "$BASE"/' + shlex.quote("diffusion-vendor/" + relative) + ' "$@"\n')
     launcher.chmod(0o755)
@@ -88,15 +110,18 @@ def install_diffusion():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("packs", nargs="+", choices=PACKS)
-    parser.add_argument("--runtime", action="store_true", help="Also install a verified Apple Silicon diffusion runtime")
+    parser.add_argument("packs", nargs="*", choices=PACKS)
+    parser.add_argument("--runtime", action="store_true", help="Also install a verified Windows x64 CPU / Apple Silicon diffusion runtime")
+    parser.add_argument('--runtime-only', action='store_true', help='Install the runtime without downloading models')
     args = parser.parse_args()
+    if not args.packs and not args.runtime_only:
+        parser.error('Choose a model pack or --runtime-only.')
     (ROOT / "data").mkdir(exist_ok=True)
     lock = ROOT / "data" / "setup.lock"
     fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     os.close(fd)
     try:
-        if args.runtime:
+        if args.runtime or args.runtime_only:
             install_diffusion()
         for pack in dict.fromkeys(args.packs):
             for repo, filename, subdir in PACKS[pack]:

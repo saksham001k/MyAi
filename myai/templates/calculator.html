@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calculator</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#111827;color:#e5e7eb;font-family:system-ui,sans-serif;padding:20px}
+main{width:min(100%,360px);padding:24px;background:#1f2937;border:1px solid #374151;border-radius:24px;box-shadow:0 20px 60px #0006}
+h1{font-size:18px;margin:0 0 18px;color:#a5b4fc}#history{min-height:24px;color:#9ca3af;text-align:right;font-size:14px;overflow-wrap:anywhere}
+#display{display:block;text-align:right;font-size:38px;min-height:70px;padding:12px 0;overflow-wrap:anywhere}.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+button{border:0;border-radius:12px;background:#374151;color:white;padding:17px 4px;font:600 20px system-ui;cursor:pointer}button:hover{background:#4b5563}button:focus-visible{outline:3px solid #a5b4fc;outline-offset:2px}
+.operator{color:#c7d2fe;background:#37306b}.equal{background:#6366f1}.wide{grid-column:span 2}.clear{color:#fca5a5}footer{margin-top:18px;color:#9ca3af;font-size:12px;line-height:1.6;text-align:center}
+</style>
+</head>
+<body>
+<main aria-label="Calculator">
+<h1>Calculator</h1><div id="history" aria-hidden="true"></div><output id="display" aria-live="polite">0</output>
+<div class="keys">
+<button class="clear" data-key="clear">C</button><button data-key="backspace" aria-label="Backspace">⌫</button><button data-key="sign" aria-label="Change sign">±</button><button class="operator" data-key="/" aria-label="Divide">÷</button>
+<button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button><button class="operator" data-key="*" aria-label="Multiply">×</button>
+<button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button><button class="operator" data-key="-" aria-label="Subtract">−</button>
+<button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button><button class="operator" data-key="+" aria-label="Add">+</button>
+<button class="wide" data-key="0">0</button><button data-key=".">.</button><button class="equal" data-key="=" aria-label="Equals">=</button>
+</div><footer>Keyboard: numbers, + − * /, Enter, Backspace.<br>Escape clears. Operations calculate from left to right.</footer>
+</main>
+<script>
+'use strict';
+let value='0',stored=null,operation=null,fresh=false,error=false;
+const display=document.getElementById('display'),history=document.getElementById('history');
+function paint(){display.textContent=value;history.textContent=operation===null?'':String(stored)+' '+({'*':'×','/':'÷','-':'−','+':'+'}[operation]);}
+function clear(){value='0';stored=null;operation=null;fresh=false;error=false;paint();}
+function calculate(a,b,op){switch(op){case '+':return a+b;case '-':return a-b;case '*':return a*b;case '/':return b===0?null:a/b;default:return b;}}
+function result(number){if(number===null||!Number.isFinite(number)){value='Cannot divide by zero or represent result';error=true;stored=null;operation=null;fresh=true;return false;}value=String(Number(number.toPrecision(12)));return true;}
+function input(key){
+ if(key==='clear'){clear();return;}
+ if(error){clear();if(!/^[0-9.]$/.test(key))return;}
+ if(/^[0-9]$/.test(key)){if(fresh){value='0';fresh=false;}if(value.replace('-','').length<16)value=value==='0'?key:value==='-0'?'-'+key:value+key;}
+ else if(key==='.'){if(fresh){value='0';fresh=false;}if(!value.includes('.'))value+='.';}
+ else if(key==='backspace'){if(fresh){value='0';fresh=false;}else{value=value.slice(0,-1);if(value===''||value==='-')value='0';}}
+ else if(key==='sign'){value=value.startsWith('-')?value.slice(1):value==='0'?'0':'-'+value;}
+ else if(['+','-','*','/'].includes(key)){if(operation!==null&&!fresh){if(!result(calculate(stored,Number(value),operation))){paint();return;}}stored=Number(value);operation=key;fresh=true;}
+ else if(key==='='){if(operation!==null&&!fresh){result(calculate(stored,Number(value),operation));stored=null;operation=null;fresh=true;}}
+ paint();
+}
+document.querySelector('.keys').addEventListener('click',event=>{const button=event.target.closest('button');if(button)input(button.dataset.key);});
+document.addEventListener('keydown',event=>{if(event.ctrlKey||event.altKey||event.metaKey)return;let key=event.key;if(key==='Enter')key='=';if(key==='Escape'||key==='Delete')key='clear';if(key==='Backspace')key='backspace';if(/^[0-9.+*/=-]$/.test(key)||['clear','backspace'].includes(key)){event.preventDefault();input(key);}});
+</script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import mimetypes
 import re
 import secrets
 import threading
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -28,6 +29,8 @@ from .preferences import Preferences
 from .prompts import RESPONSE_GUIDANCE
 from .documents import context as document_context
 from .shared_memory import SharedMemory, SharedMemoryError
+from .project_memory import ProjectMemory
+from .model_import import ModelImports
 
 
 class App:
@@ -38,6 +41,7 @@ class App:
         self.store = Store(root / "data")
         self.engine = engine or Engine(root)
         self.shared_memory = shared_memory if shared_memory is not None else SharedMemory.from_environment()
+        self.project_memory = ProjectMemory(self.shared_memory)
         self.token = secrets.token_urlsafe(32)
         self.busy = threading.Lock()
         self.cancel = threading.Event()
@@ -52,6 +56,7 @@ class App:
         self.tasks = Tasks(self)
         self.preferences = Preferences(root / "data")
         self.downloads = DownloadManager(root)
+        self.model_imports = ModelImports(root)
 
 
 def make_server(app, port=0):
@@ -77,16 +82,32 @@ def make_server(app, port=0):
             self.wfile.write(payload)
 
         def authorized(self):
+            def reject(code, message):
+                # Drain a small denied POST before closing: unread request data
+                # can turn the intended 401/403 into a Windows socket reset.
+                if self.command in ('POST', 'DELETE'):
+                    try:
+                        length = int(self.headers.get('Content-Length', '0'))
+                        if 0 < length <= 65536:
+                            previous = self.connection.gettimeout()
+                            self.connection.settimeout(1)
+                            try:
+                                self.rfile.read(length)
+                            finally:
+                                self.connection.settimeout(previous)
+                    except (ValueError, OSError):
+                        pass
+                self.output(code, {'error': message})
             expected_host = f"127.0.0.1:{self.server.server_port}"
             if self.headers.get("Host") != expected_host:
-                self.output(403, {"error": "Invalid host"})
+                reject(403, 'Invalid host')
                 return False
             origin = self.headers.get("Origin")
             if origin and origin != "http://" + expected_host:
-                self.output(403, {"error": "Invalid origin"})
+                reject(403, 'Invalid origin')
                 return False
             if not hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + app.token):
-                self.output(401, {"error": "Session expired. Open the URL printed by MyAi again."})
+                reject(401, 'Session expired. Open the URL printed by MyAi again.')
                 return False
             return True
 
@@ -103,6 +124,7 @@ def make_server(app, port=0):
             path = urlparse(self.path).path
             static = {"/js/setup.js": ("js/setup.js", "text/javascript; charset=utf-8"),
                       "/js/shared_memory.js": ("js/shared_memory.js", "text/javascript; charset=utf-8"),
+                      "/js/project_memory.js": ("js/project_memory.js", "text/javascript; charset=utf-8"),
                       "/": ("index.html", "text/html; charset=utf-8"),
                       "/js/knowledge.js": ("js/knowledge.js", "text/javascript; charset=utf-8"),
                       "/js/tasks.js": ("js/tasks.js", "text/javascript; charset=utf-8"),
@@ -132,7 +154,14 @@ def make_server(app, port=0):
             if not self.authorized():
                 return
             try:
-                if path == "/api/shared-memory/status":
+                if path == '/api/powerhouse/projects':
+                    self.output(200, {'projects': app.project_memory.list()})
+                elif path.startswith('/api/powerhouse/projects/'):
+                    parts = path.strip('/').split('/')
+                    if len(parts) != 4:
+                        raise ValueError('Unknown shared project route')
+                    self.output(200, app.project_memory.context(parts[3]))
+                elif path == "/api/shared-memory/status":
                     self.output(200, app.shared_memory.status())
                 elif path == "/api/shared-memory/records":
                     namespace = parse_qs(urlparse(self.path).query).get('namespace', ['personal'])[0]
@@ -145,14 +174,17 @@ def make_server(app, port=0):
                     self.output(200, app.tasks.list())
                 elif path.startswith("/api/tasks/"):
                     parts = path.strip('/').split('/')
-                    if len(parts) not in (3, 4) or (len(parts) == 4 and parts[3] != 'report'):
+                    if len(parts) not in (3, 4) or (len(parts) == 4 and parts[3] not in ('report', 'artifact')):
                         raise ValueError('Unknown task route.')
                     record = app.tasks.get(parts[2])
-                    if len(parts) == 4 and parts[3] == 'report':
-                        report = app.tasks.folder(record['id']) / 'report.md'
+                    if len(parts) == 4:
+                        artifact = parts[3] == 'artifact'
+                        if artifact and not record.get('artifact_path'):
+                            raise ValueError('No completed HTML file is available.')
+                        report = app.tasks.folder(record['id']) / ('artifact.html' if artifact else 'report.md')
                         if not report.exists():
                             raise ValueError('Report is not ready yet.')
-                        self.headers_out(200, 'text/markdown; charset=utf-8')
+                        self.headers_out(200, 'application/octet-stream' if artifact else 'text/markdown; charset=utf-8')
                         self.wfile.write(report.read_bytes())
                     else:
                         after = int(parse_qs(urlparse(self.path).query).get('after', ['0'])[0])
@@ -171,6 +203,8 @@ def make_server(app, port=0):
                     self.output(200, describe_catalog(app.root))
                 elif path == "/api/catalog/download":
                     self.output(200, app.downloads.snapshot())
+                elif path == "/api/models/import":
+                    self.output(200, app.model_imports.snapshot())
                 elif path == "/api/project":
                     self.output(200, app.workbench.listing())
                 elif path == "/api/media":
@@ -266,6 +300,12 @@ def make_server(app, port=0):
                 except (ValueError, TypeError) as exc:
                     self.output(400, {'error': str(exc)})
                 return
+            if path == '/api/models/import':
+                try:
+                    self.output(202, app.model_imports.start(body))
+                except (ValueError, TypeError, OSError) as exc:
+                    self.output(400, {'error': str(exc)})
+                return
             if path == "/api/tasks" or path.startswith("/api/tasks/"):
                 try:
                     if path == '/api/tasks':
@@ -319,7 +359,16 @@ def make_server(app, port=0):
                 self.output(409, {"error": "An operation is already in progress. Stop it or wait."})
                 return
             try:
-                if path == '/api/shared-memory/ask':
+                if path == '/api/powerhouse/projects':
+                    self.output(201, app.project_memory.create(body))
+                elif path.startswith('/api/powerhouse/projects/'):
+                    parts = path.strip('/').split('/')
+                    if len(parts) not in (4, 5):
+                        raise ValueError('Unknown shared project route')
+                    self.output(200, app.project_memory.mutate(parts[3], parts[4] if len(parts) == 5 else '', body))
+                elif path == '/api/powerhouse/ask':
+                    self.output(200, app.project_memory.ask(app.engine, body, app.cancel))
+                elif path == '/api/shared-memory/ask':
                     self.output(200, app.shared_memory.ask(app.engine, body, app.cancel))
                 elif path in ('/api/shared-memory/create', '/api/shared-memory/edit', '/api/shared-memory/delete'):
                     self.output(200, app.shared_memory.mutate(path.rsplit('/', 1)[1], body))
@@ -382,8 +431,19 @@ def make_server(app, port=0):
                 self.output(404, {"error": "Conversation not found"})
             except (ValueError, TypeError) as exc:
                 self.output(400, {"error": str(exc)})
-            except (OSError, RuntimeError):
-                self.output(503, {"error": "Operation failed. Check drive permissions, free space, and data/engine.log."})
+            except (OSError, RuntimeError) as exc:
+                # Preserve the real failure locally without recording request bodies
+                # or authentication headers in the diagnostic file.
+                try:
+                    with (app.root / "data" / "errors.log").open("a", encoding="utf-8") as log:
+                        log.write(f"\nPOST {path}\n")
+                        traceback.print_exc(file=log)
+                except OSError:
+                    pass
+                detail = type(exc).__name__
+                if getattr(exc, "winerror", None) is not None:
+                    detail += f" (Windows error {exc.winerror})"
+                self.output(503, {"error": f"Operation failed: {detail}. Details: data/errors.log and data/engine.log."})
             finally:
                 app.busy.release()
 

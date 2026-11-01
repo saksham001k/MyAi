@@ -16,6 +16,26 @@ python3 scripts/setup_models.py code-small code
 
 ## Image workspace
 
+### Windows x64 setup
+
+The installer now supports the official checksummed Windows x64 CPU runtime.
+It preserves the existing text runtime and keeps diffusion's libraries under
+`runtime/windows-x86_64/diffusion-vendor`, resolved through `runtime.json`.
+
+From PowerShell:
+
+```powershell
+& "C:\Users\Admin\Documents\Projects\MyAi\.venv\Scripts\python.exe" "C:\Users\Admin\Documents\Projects\MyAi\scripts\setup_models.py" image --runtime
+```
+
+This installs a 4.27 GB SD 1.5 checkpoint plus a roughly 17 MB CPU runtime.
+The model is stored under `models/images`, which on this PC maps to
+`D:\AI\models\images`. Text/coding GGUF imports do not supply this checkpoint.
+Downloads are verified against publisher SHA-256. CPU image generation can be
+slow; successful inference and useful image quality must be checked separately.
+Restart MyAi after setup and request an image. The remaining macOS instructions
+below describe the older platform workflow.
+
 Two preset adapters: Stable Diffusion 1.5 (512 × 512) and SDXL Base 1.0 (768 × 768). SDXL is heavier. Each uses a single checkpoint containing the standard required components. The app runs stable-diffusion.cpp's `sd-cli` with explicit arguments, a bounded step count and seed, and a unique output folder.
 
 ```bash

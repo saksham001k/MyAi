@@ -6,6 +6,7 @@
     pollGeneration = 0;
   const activeStates = new Set(["queued", "running", "cancelling"]);
   const labels = {
+    file_ready: "HTML file saved on your Desktop",
     queued: "Queued",
     running: "Working locally",
     cancelled: "Cancelled — outputs preserved",
@@ -116,6 +117,10 @@
     );
     if (task.verification && task.verification !== "Not run")
       root.append(text("p", task.verification, "task-warning"));
+    if (task.memory_sync)
+      root.append(text("p", task.memory_sync.status === "saved"
+        ? "Project handoff saved for the next model."
+        : "Project handoff is pending: " + task.memory_sync.error, "task-warning"));
     if (task.review?.status === "applied")
       root.append(
         text(
@@ -143,6 +148,8 @@
       );
     if (task.output_path)
       location.append(text("p", task.output_path, "task-output"));
+    if (task.artifact_path)
+      root.append(text("p", "Saved file: " + task.artifact_path, "task-output"));
     if (task.project || task.output_path) root.append(location);
     if (task.error) root.append(text("p", task.error, "task-warning"));
     const buttons = text("div", "", "task-buttons");
@@ -173,6 +180,22 @@
       buttons.append(download);
     }
     root.append(buttons);
+    if (task.artifact_path) {
+      const download = text('button', 'Download HTML file');
+      download.type = 'button';
+      download.onclick = async () => {
+        try {
+          const response = await req('/api/tasks/' + task.id + '/artifact');
+          const url = URL.createObjectURL(await response.blob());
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = task.artifact_path.split(/[\\/]/).pop();
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) { error(e); }
+      };
+      root.append(download);
+    }
     if (task.answer) {
       const answer = text("div", "", "task-answer");
       renderContent(answer, task.answer);

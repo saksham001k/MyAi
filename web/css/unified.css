@@ -356,7 +356,8 @@ body.sidebar-collapsed .brand img {
   }
 }
 #knowledge-dialog,
-#shared-memory-dialog {
+#shared-memory-dialog,
+#project-memory-dialog {
   width: min(850px, 92vw);
   max-height: 86dvh;
   overflow: auto;
@@ -367,17 +368,22 @@ body.sidebar-collapsed .brand img {
   padding: 22px;
 }
 #knowledge-dialog::backdrop,
-#shared-memory-dialog::backdrop {
+#shared-memory-dialog::backdrop,
+#project-memory-dialog::backdrop {
   background: #000a;
   backdrop-filter: blur(5px);
 }
-#shared-memory-dialog label {
+#shared-memory-dialog label,
+#project-memory-dialog label {
   display: block;
   margin: 12px 0;
 }
 #shared-memory-dialog input,
 #shared-memory-dialog textarea,
-#shared-memory-dialog select {
+#shared-memory-dialog select,
+#project-memory-dialog input,
+#project-memory-dialog textarea,
+#project-memory-dialog select {
   display: block;
   width: 100%;
   margin-top: 6px;

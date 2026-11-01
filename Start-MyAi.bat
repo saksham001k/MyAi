@@ -3,6 +3,6 @@ cd /d "%~dp0"
 if exist MyAi.exe (
   MyAi.exe
 ) else (
-  python run.py
+  start "" wscript.exe "%~dp0MyAi.vbs"
 )
 if errorlevel 1 pause

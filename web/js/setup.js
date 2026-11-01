@@ -2,6 +2,27 @@
 (() => {
   const el = (id) => document.getElementById(id);
   let timer;
+  let importTimer;
+  async function pollImport() {
+    clearTimeout(importTimer);
+    try {
+      const state = await (await api('/api/models/import')).json();
+      const active = state.status === 'importing';
+      el('import-model').disabled = active;
+      el('import-model-status').textContent = state.status === 'idle' ? 'Choose a downloaded model to add.'
+        : `${state.filename}: ${state.status}${state.received != null ? ` · ${(state.received / 1e6).toFixed(1)} MB of ${(state.total / 1e6).toFixed(1)} MB` : ''}${state.error ? ' · ' + state.error : ''}${state.verification ? ' · ' + state.verification : ''}`;
+      if (active) importTimer = setTimeout(pollImport, 1000);
+      else if (state.status === 'complete') await refresh();
+    } catch (e) { el('import-model-status').textContent = e.message; el('import-model').disabled = false; }
+  }
+  el('add-models').addEventListener('toggle', () => { if (el('add-models').open) pollImport(); });
+  el('import-model').onclick = async () => {
+    el('import-model').disabled = true;
+    try {
+      await api('/api/models/import', 'POST', {path: el('import-model-path').value, sha256: el('import-model-sha').value.trim()});
+      await pollImport();
+    } catch (e) { el('import-model-status').textContent = e.message; el('import-model').disabled = false; }
+  };
   const error = (e) => { el("download-status").textContent = e.message; };
   function measurement(m) {
     const parts = [];

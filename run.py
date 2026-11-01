@@ -12,6 +12,19 @@ from myai.hardware import detect_hardware
 from myai.server import App, make_server
 
 
+def close_app(app):
+    """Release background work and model processes for both entrypoints."""
+    app.cancel.set()
+    app.downloads.stop()
+    if app.downloads.thread is not None:
+        app.downloads.thread.join(timeout=65)
+    app.tasks.close()
+    app.media.close()
+    app.engine.stop()
+    with app.busy:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="KISS portable offline assistant")
     parser.add_argument("--root", type=Path, help="Portable workspace folder (default: beside app)")
@@ -38,15 +51,7 @@ def main():
     try:
         server.serve_forever()
     finally:
-        app.downloads.stop()
-        if app.downloads.thread is not None:
-            app.downloads.thread.join(timeout=65)
-        app.tasks.close()
-        app.media.close()
-        app.engine.stop()
-        # Allow the request thread to persist an interrupted response before exit.
-        with app.busy:
-            pass
+        close_app(app)
         server.server_close()
 
 

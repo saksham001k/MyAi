@@ -1,5 +1,6 @@
 """Fast, transparent local intent routing. No inference, network or downloads."""
 import re
+from .artifacts import wants_desktop_html, basic_calculator_request
 
 
 def plan_request(body, models, media):
@@ -18,9 +19,13 @@ def plan_request(body, models, media):
     video = not (explaining or negated) and bool(re.search(create + r'.{0,45}\b(?:video|animation|clip)\b', text)) and not code
     research = bool(re.search(r'\b(?:research|search (?:the )?(?:web|internet)|look up|latest|current|today|news|browse|find sources|fact.check)\b|https?://', text))
     project = bool(re.search(r'\b(?:fix|edit|modify|refactor|implement|update|change|test|inspect|review|build)\b', text)) and (bool(body.get('project_path')) or bool(re.search(r'\b(?:my|this|the) (?:project|repo|repository|codebase|app)\b', text)))
-    kind = 'video' if video else 'image' if image or edit_image else 'project' if project else 'research' if research else 'code' if code else 'chat'
+    artifact = wants_desktop_html(prompt)
+    kind = 'artifact' if artifact else 'video' if video else 'image' if image or edit_image else 'project' if project else 'research' if research else 'code' if code else 'chat'
     result = {'kind': kind, 'image_edit': edit_image and kind == 'image', 'model': None, 'ready': True,
-              'reason': {'chat': 'Answer locally', 'code': 'Write or explain code', 'project': 'Work on a reviewed project copy', 'research': 'Read public sources and save a report', 'image': 'Create or edit an image locally', 'video': 'Create an experimental local video'}[kind]}
+              'reason': {'artifact': 'Create a self-contained HTML file on your Desktop', 'chat': 'Answer locally', 'code': 'Write or explain code', 'project': 'Work on a reviewed project copy', 'research': 'Read public sources and save a report', 'image': 'Create or edit an image locally', 'video': 'Create an experimental local video'}[kind]}
+    if artifact and basic_calculator_request(prompt):
+        result.update(generator='builtin-basic-calculator', reason='Save the tested basic calculator on your Desktop')
+        return result
     if kind in ('image', 'video'):
         available = [p for p in media.get('presets', []) if p['kind'] == kind and p['ready']]
         if available:
@@ -28,10 +33,13 @@ def plan_request(body, models, media):
             result['model'] = available[0]['name']
         else:
             result.update(ready=False, message=f'No ready local {kind} model/runtime was found. Install the components described in docs/STUDIO.md; no download will start automatically.')
+            setup = media.get('setup')
+            if kind == 'image' and isinstance(setup, dict) and setup.get('status') in ('downloading', 'testing', 'incomplete', 'test_failed'):
+                result['message'] = setup.get('message') or result['message']
     else:
         # Prefer a coding model for code answers; multi-step tasks benefit from the
         # general instruction model's tool-following ability on this installation.
-        candidates = sorted(models, key=lambda m: ((('coder' in m['name'].lower()) != (kind == 'code')), -m.get('bytes', 0), m['name']))
+        candidates = sorted(models, key=lambda m: ((('coder' in m['name'].lower()) != (kind in ('code', 'artifact'))), -m.get('bytes', 0), m['name']))
         if candidates:
             result['model'] = candidates[0]['name']
         else:

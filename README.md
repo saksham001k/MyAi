@@ -8,6 +8,10 @@ It runs compatible GGUF models through its own llama.cpp process. The web app do
 
 ## Start
 
+**Windows:** open **MyAi** from the desktop or Start menu, or double-click
+`MyAi.vbs`. Startup and shutdown are automatic; no terminal commands are needed
+after setup. See [Windows app](docs/WINDOWS-APP.md) for setup and shortcuts.
+
 Optional: [Shared memory with Earthma](docs/SHARED-MEMORY.md) lets MyAi and
 Earthma Notes use the same saved facts across model changes and app restarts.
 Open the **Shared memory** panel after using the Earthma launcher.

@@ -67,6 +67,8 @@ class SharedMemory:
                 raise SharedMemoryError('Memory changed or was deleted. Refresh before editing.', 409) from None
             if code == 400:
                 raise SharedMemoryError('Shared memory rejected this input. Check text, space and revision.', 400) from None
+            if code == 404:
+                raise SharedMemoryError('Shared project or record not found. Refresh the project list.', 404) from None
             raise SharedMemoryError('Shared memory is unavailable or its local credentials were rejected.') from None
         except (OSError, ValueError) as exc:
             raise SharedMemoryError('Cannot read current shared memory. Start Earthma and check its connection.') from None

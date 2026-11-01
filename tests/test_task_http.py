@@ -48,6 +48,34 @@ class TaskHTTPTests(unittest.TestCase):
         self.assertIsNone(self.engine.seen)
         self.assertEqual(self.req('/api/route', {'prompt': ''})[0], 400)
 
+    def test_local_model_import_is_authenticated_and_discoverable(self):
+        source = self.root / 'imported.gguf'
+        source.write_bytes(b'GGUFfixture')
+        self.assertEqual(self.req('/api/models/import', auth=False)[0], 401)
+        self.assertEqual(self.req('/api/models/import', {'path': str(source)}, auth=False)[0], 401)
+        self.assertEqual(self.req('/api/models/import', {'path': 'relative.gguf'})[0], 400)
+        self.assertEqual(self.req('/api/models/import', {'path': str(source)})[0], 202)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            state = json.loads(self.req('/api/models/import')[1])
+            if state['status'] != 'importing':
+                break
+            time.sleep(.01)
+        self.assertEqual(state['status'], 'complete')
+        self.assertEqual((self.root / 'models/imported.gguf').read_bytes(), source.read_bytes())
+
+    def test_artifact_download_requires_completed_record_and_auth(self):
+        ident = 'e' * 32
+        folder = self.app.tasks.folder(ident)
+        folder.mkdir()
+        self.app.tasks.save({'id': ident, 'events': [], 'status': 'file_ready',
+                             'artifact_path': 'Desktop/calculator.html'})
+        (folder / 'artifact.html').write_text('<html><body>calculator</body></html>')
+        self.assertEqual(self.req('/api/tasks/' + ident + '/artifact', auth=False)[0], 401)
+        code, data = self.req('/api/tasks/' + ident + '/artifact')
+        self.assertEqual(code, 200)
+        self.assertIn(b'calculator', data)
+
     def test_unified_shell_preserves_kiss_brand_and_single_upload(self):
         html = self.req('/', auth=False)[1].decode()
         self.assertIn('alt="KISS"', html)

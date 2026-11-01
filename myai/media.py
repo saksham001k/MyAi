@@ -49,7 +49,12 @@ class Media:
             missing = [name for name in item["files"].values() if not (self.root / "models" / name).is_file()]
             result.append({"id": key, "name": item["name"], "kind": item["kind"], "missing": missing,
                            "ready": self.binary.is_file() and not missing})
-        return {"presets": result, "runtime_found": self.binary.is_file()}
+        setup_path = self.root / 'data/image-setup.json'
+        try:
+            setup = json.loads(setup_path.read_text(encoding='utf-8')) if setup_path.exists() else None
+        except (OSError, ValueError):
+            setup = None
+        return {"presets": result, "runtime_found": self.binary.is_file(), 'setup': setup}
 
     def save(self, job):
         with self.state_lock:

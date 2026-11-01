@@ -286,14 +286,15 @@ $("composer").onsubmit = async (e) => {
       await startMedia(prompt, route);
       return;
     }
-    await ensureModel(route);
-    if (route.kind === "project" || route.kind === "research") {
+    if (route.model) await ensureModel(route);
+    if (["project", "research", "artifact"].includes(route.kind)) {
       leaveView();
       active = null;
       operation = "task";
       setBusy(true);
       $("project-access").open = false;
       await window.startUnifiedTask({
+        shared_project_id: route.kind === 'project' ? window.selectedSharedProject?.() || '' : '',
         goal: prompt,
         kind: route.kind,
         project_path: $("task-project").value.trim(),

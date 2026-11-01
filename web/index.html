@@ -18,6 +18,7 @@
     <script src="/js/nav.js" defer></script>
     <script src="/js/knowledge.js" defer></script>
     <script src="/js/shared_memory.js" defer></script>
+    <script src="/js/project_memory.js" defer></script>
     <script src="/js/setup.js" defer></script>
   </head>
   <body>
@@ -71,6 +72,7 @@
           ><button id="knowledge-open" type="button" class="subtle">
             Memory &amp; files</button
           ><button id="shared-memory-open" type="button" class="subtle">Shared memory</button
+          ><button id="project-memory-open" type="button" class="subtle">Project memory</button
           ><button id="export" type="button" class="subtle">Export</button
           ><button
             id="settings-toggle"
@@ -126,6 +128,15 @@
           </button>
         </div>
         <p id="setup-hint"></p>
+        <details id="add-models">
+          <summary>Add models</summary>
+          <p>Import a GGUF model you have already downloaded. Paste its full file path; the original file is kept.</p>
+          <label>Model file path<input id="import-model-path" type="text" placeholder="D:\AI\models\your-model.gguf" /></label>
+          <label>Publisher SHA-256 (optional)<input id="import-model-sha" type="text" maxlength="64" placeholder="Checksum from the model publisher" /></label>
+          <button id="import-model" type="button">Add local model</button>
+          <p id="import-model-status" role="status" aria-live="polite"></p>
+          <p class="local-note">Imports use extra disk space. A GGUF header check does not guarantee compatibility with your runtime. To download a model, open Models &amp; performance below.</p>
+        </details>
         <details id="model-tools">
           <summary>Models &amp; performance</summary>
           <p id="memory-status" class="local-note"></p>
@@ -338,6 +349,34 @@
       <p id="shared-memory-answer" role="status"></p>
       <div id="shared-memory-sources"></div>
       <p class="footnote">Uses current matching facts in this space with the loaded model. Earlier chat messages are excluded. Forget removes a fact from future memory answers; existing chats and exports remain.</p>
+    </dialog>
+    <dialog id="project-memory-dialog" aria-labelledby="project-memory-title">
+      <header class="topbar"><h2 id="project-memory-title">Project memory</h2><button id="project-memory-close" type="button">Close</button></header>
+      <p>Save the goal once. Linked project tasks receive the current requirements and save a handoff for the next model.</p>
+      <p id="project-memory-error" role="alert" hidden></p>
+      <label>Saved project<select id="project-memory-select"><option value="">No linked project</option></select></label>
+      <button id="project-memory-refresh" type="button">Refresh projects</button>
+      <p id="project-memory-status" role="status"></p>
+      <form id="project-memory-form">
+        <label>Project name<input id="project-memory-name" required maxlength="200" /></label>
+        <label>Project folder<input id="project-memory-workspace" placeholder="Absolute project folder" /></label>
+        <label>Goal<textarea id="project-memory-goal" required rows="3"></textarea></label>
+        <label>Acceptance checks, one per line<textarea id="project-memory-acceptance" required rows="3"></textarea></label>
+        <button id="project-memory-save" type="submit">Create shared project</button>
+      </form>
+      <hr />
+      <div id="project-memory-current"></div>
+      <form id="project-memory-decision-form">
+        <label>Decision subject<input id="project-memory-key" required maxlength="64" placeholder="release-date" /></label>
+        <label>Decision value<textarea id="project-memory-value" required rows="2"></textarea></label>
+        <button type="submit">Add decision</button>
+      </form>
+      <form id="project-memory-question-form">
+        <label>Ask the loaded model about this project<textarea id="project-memory-question" required maxlength="2000" rows="2"></textarea></label>
+        <button type="submit">Ask about project</button>
+      </form>
+      <p id="project-memory-answer" role="status"></p>
+      <p class="footnote">Choose a saved project to link subsequent project tasks. Changing a decision invalidates an earlier handoff. A changed source stops publication of an outdated answer.</p>
     </dialog>
     <dialog id="file-preview" aria-labelledby="preview-title">
       <header class="topbar">
